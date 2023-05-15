@@ -50,7 +50,7 @@ unsafe extern "C" fn genpdf_c(L: *mut lua_State) -> c_int {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn luaopen_libluatyp(L: *mut lua_State) -> c_int {
+pub unsafe extern "C" fn luaopen_libtypst_lua(L: *mut lua_State) -> c_int {
     // Create a new table
     lua_newtable(L);
 
