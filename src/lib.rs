@@ -15,12 +15,10 @@ use std::os::raw::c_int;
 // This is the new wrapper function
 unsafe extern "C" fn genpdf_c(L: *mut lua_State) -> c_int {
     let input = CStr::from_ptr(lua_tostring(L, 1)).to_string_lossy().into_owned();
-    //let output = CStr::from_ptr(lua_tostring(L, 2)).to_string_lossy().into_owned();
     let root = CStr::from_ptr(lua_tostring(L, 2)).to_string_lossy().into_owned();
     let json = CStr::from_ptr(lua_tostring(L, 3)).to_string_lossy().into_owned();
     
     let input = PathBuf::from(input);
-    //let output = PathBuf::from(output);
     let root = PathBuf::from(root);
     let json = if json.is_empty() {
         None
