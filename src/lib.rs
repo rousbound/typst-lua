@@ -1,66 +1,61 @@
-use libc::{
-    c_char,
-    size_t,
-};
 use std::ffi::{CStr, CString};
-use std::path::PathBuf;
-use serde_json::Value;
-use std::str::FromStr;
-use typst_genpdf::genpdf;
-extern crate lua_sys;
-
 use lua_sys::*;
 use std::os::raw::c_int;
+use typst_genpdf::Compiler;
+use std::path::PathBuf;
+use libc::size_t;
 
-// This is the new wrapper function
-unsafe extern "C" fn genpdf_c(L: *mut lua_State) -> c_int {
-    let input = CStr::from_ptr(lua_tostring(L, 1)).to_string_lossy().into_owned();
-    let root = CStr::from_ptr(lua_tostring(L, 2)).to_string_lossy().into_owned();
-    let json = CStr::from_ptr(lua_tostring(L, 3)).to_string_lossy().into_owned();
-    
-    let input = PathBuf::from(input);
-    let root = PathBuf::from(root);
-    let json = if json.is_empty() {
-        None
-    } else {
-        Some(serde_json::from_str(&json).unwrap())
+unsafe extern "C" fn compiler_new(L: *mut lua_State) -> c_int {
+    let root = {
+        let raw_str = lua_tostring(L, 1);
+        CStr::from_ptr(raw_str).to_string_lossy().into_owned()
     };
+    
+    let compiler = Box::new(Compiler::new(PathBuf::from(root)));
+    let compiler_ptr = Box::into_raw(compiler);
+    
+    lua_pushlightuserdata(L, compiler_ptr as *mut std::ffi::c_void);
+    lua_setglobal(L, CString::new("compiler").unwrap().as_ptr());
 
-    let result = match genpdf(input, root, json) {
-        Ok(data) => {
-            // Convert the Vec<u8> to a pointer and get its length
-            let len = data.len();
-            let data_ptr = data.as_ptr();
+    0
+}
 
-            // Do not allow data to be deallocated
-            std::mem::forget(data);
-
-            // Push the data onto the Lua stack
-            lua_pushlstring(L, data_ptr as *const i8, len as size_t);
+unsafe extern "C" fn compiler_compile(L: *mut lua_State) -> c_int {
+    let (input, json) = {
+        let raw_str_input = lua_tostring(L, 1);
+        let input = CStr::from_ptr(raw_str_input).to_string_lossy().into_owned();
+        
+        let raw_str_json = lua_tostring(L, 2);
+        let json = CStr::from_ptr(raw_str_json).to_string_lossy().into_owned();
+        
+        (input, json)
+    };
+    
+    lua_getglobal(L, CString::new("compiler").unwrap().as_ptr());
+    let compiler_ptr = lua_touserdata(L, -1) as *mut Compiler;
+    
+    let result = (*compiler_ptr).compile(PathBuf::from(input), Some(serde_json::from_str(&json).unwrap()));
+    
+    match result {
+        Ok(bytes) => {
+            lua_pushlstring(L, bytes.as_ptr() as *const i8, bytes.len() as size_t);
+            1
         }
         Err(_) => {
             lua_pushnil(L);
+            1
         }
-    };
-
-    // The number of return values
-    1
+    }
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn luaopen_libtypst_lua(L: *mut lua_State) -> c_int {
-    // Create a new table
+pub unsafe extern "C" fn luaopen_typst(L: *mut lua_State) -> c_int {
     lua_newtable(L);
+    lua_pushcfunction(L, Some(compiler_new));
+    lua_setfield(L, -2, CString::new("compiler").unwrap().as_ptr());
+    
+    lua_pushcfunction(L, Some(compiler_compile));
+    lua_setfield(L, -2, CString::new("compile").unwrap().as_ptr());
 
-    // Push the genpdf_c function onto the Lua stack
-    lua_pushcfunction(L, Some(genpdf_c));
-
-    // Create a C string for the field name
-    let field_name = CString::new("genpdf").unwrap();
-
-    // Set it as a field of the table
-    lua_setfield(L, -2, field_name.as_ptr());
-
-    // Return the table
     1
 }

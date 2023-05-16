@@ -1926,7 +1926,6 @@ dependencies = [
 [[package]]
 name = "typst-genpdf"
 version = "0.1.0"
-source = "git+https://github.com/rousbound/typst-genpdf#7d6192e97835ae4c857ba978bed9e87402f5abd4"
 dependencies = [
  "chrono",
  "codespan-reporting",
