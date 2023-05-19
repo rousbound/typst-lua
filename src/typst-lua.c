@@ -7,7 +7,7 @@ int genpdf(lua_State *L) {
     const char *root = luaL_checkstring(L, 2);
     const char *json = luaL_optstring(L, 3, NULL);
 
-    int result = rust_genpdf(input, output, root, json);
+    int result = rust_genpdf(input, root, json);
 
     lua_pushinteger(L, result);
     return 1;
