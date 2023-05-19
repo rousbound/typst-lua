@@ -6,14 +6,18 @@ use std::path::PathBuf;
 use libc::{size_t, c_void};
 
 unsafe extern "C" fn compiler_new(L: *mut lua_State) -> c_int {
+    // Gets 'root' string from lua_State
     let root = {
         let raw_str = lua_tostring(L, 1);
         CStr::from_ptr(raw_str).to_string_lossy().into_owned()
     };
 
+    // Creates new Compiler instance, and allocates on the heap
     let compiler = Box::new(Compiler::new(PathBuf::from(root)));
+    // Gets pointer to Compiler instance allocated on the heap
     let compiler_ptr = Box::into_raw(compiler);
 
+    // Passes Compiler instance pointer to lua, in a 'piece' of userdata
     let userdata = lua_newuserdata(L, std::mem::size_of::<*mut Compiler>() as size_t);
     std::ptr::write(userdata as *mut *mut Compiler, compiler_ptr);
 
