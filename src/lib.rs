@@ -1,83 +1,104 @@
 use std::ffi::{CStr, CString};
 use lua_sys::*;
 use std::os::raw::c_int;
-use typst_genpdf::Compiler;
+use typst_compiler::Compiler;
 use std::path::PathBuf;
 use libc::{size_t, c_void};
 
-unsafe extern "C" fn compiler_new(L: *mut lua_State) -> c_int {
-    // Gets 'root' string from lua_State
-    let root = {
-        let raw_str = lua_tostring(L, 1);
-        CStr::from_ptr(raw_str).to_string_lossy().into_owned()
-    };
+// Helper function to convert Lua strings to Rust String
+unsafe fn lua_to_rust_string(L: *mut lua_State, index: c_int) -> String {
+    let raw_str = lua_tostring(L, index);
+    CStr::from_ptr(raw_str).to_string_lossy().into_owned()
+}
 
-    // Creates new Compiler instance, and allocates on the heap
+// Define a C-compatible function to create a new Compiler instance
+unsafe extern "C" fn compiler_new(L: *mut lua_State) -> c_int {
+    // Create a new scope to keep variable lifetime under control
+    let root = lua_to_rust_string(L, 1);
+
+    // Create a new Compiler object with root path
     let compiler = Box::new(Compiler::new(PathBuf::from(root)));
-    // Gets pointer to Compiler instance allocated on the heap
+    // Transform the boxed compiler into a raw pointer for FFI
     let compiler_ptr = Box::into_raw(compiler);
 
-    // Passes Compiler instance pointer to lua, in a 'piece' of userdata
+    // Allocate memory in the Lua VM for userdata (the raw Compiler pointer)
     let userdata = lua_newuserdata(L, std::mem::size_of::<*mut Compiler>() as size_t);
+    // Write the raw compiler pointer to the newly allocated userdata
     std::ptr::write(userdata as *mut *mut Compiler, compiler_ptr);
 
-    luaL_getmetatable(L, CString::new("typst.Compiler").unwrap().as_ptr());
+    // Get the metatable for the Compiler type
+    luaL_getmetatable(L, CString::new("typst_Compiler").unwrap().as_ptr());
+    // Set the metatable for the userdata
     lua_setmetatable(L, -2);
 
+    // Return 1 to Lua, indicating that we've left one return value on the stack
     1
 }
 
+// Define a C-compatible function for the compile method
 unsafe extern "C" fn compiler_compile(L: *mut lua_State) -> c_int {
-    let (input, json) = {
-        let raw_str_input = lua_tostring(L, 2);
-        let input = CStr::from_ptr(raw_str_input).to_string_lossy().into_owned();
+    // Grab the second and third arguments from the Lua stack as raw C strings
+    let input = lua_to_rust_string(L, 2);
+    let json = lua_to_rust_string(L, 3);
 
-        let raw_str_json = lua_tostring(L, 3);
-        let json = CStr::from_ptr(raw_str_json).to_string_lossy().into_owned();
-
-        (input, json)
-    };
-
-    let compiler_ptr_ptr = luaL_checkudata(L, 1, CString::new("typst.Compiler").unwrap().as_ptr()) as *mut *mut Compiler;
+    // Get the raw Compiler pointer from the first argument (the userdata)
+    let compiler_ptr_ptr = luaL_checkudata(L, 1, CString::new("typst_Compiler").unwrap().as_ptr()) as *mut *mut Compiler;
+    // Dereference the pointer to obtain a mutable reference to the Compiler
     let compiler = &mut **compiler_ptr_ptr;
 
+    // Call the compile method on the Compiler and handle the result
     let result = compiler.compile(PathBuf::from(input), Some(serde_json::from_str(&json).unwrap()));
 
+    // Match on the result to handle potential errors
     match result {
         Ok(bytes) => {
+            // If successful, push the resulting bytes onto the Lua stack
             lua_pushlstring(L, bytes.as_ptr() as *const i8, bytes.len() as size_t);
-            1
-        }
-        Err(_) => {
+            // Push nil into the stack for the error message
             lua_pushnil(L);
-            1
+            // Return 2 to Lua, indicating that we've left two return values on the stack
+            2
         }
-    }
+        Err(e) => {
+            // If there was an error, push nil onto the Lua stack
+            lua_pushnil(L);
+            // Push error message onto the Lua stack
+            let error_message = CString::new(e.to_string()).unwrap();
+            lua_pushlstring(L, error_message.as_ptr(), error_message.to_bytes().len() as size_t);
+            // Return 2 to Lua, indicating that we've left two return values on the stack
+            2
+        }
+}
 }
 
+// Define a C-compatible function to be called when the library is loaded
 #[no_mangle]
 pub unsafe extern "C" fn luaopen_typst(L: *mut lua_State) -> c_int {
-    luaL_newmetatable(L, CString::new("typst.Compiler").unwrap().as_ptr());
+    // Create a new metatable in the Lua state for Compiler objects
+    luaL_newmetatable(L, CString::new("typst_Compiler").unwrap().as_ptr());
 
-    // Create a new table and set its fields
+    // Create a new table to hold Compiler methods
     lua_newtable(L);
 
-    // Add compiler_compile as a function in this table
+    // Push the compiler_compile function onto the stack
     lua_pushcfunction(L, Some(compiler_compile));
+    // Set the function as the value for the "compile" key in the table
     lua_setfield(L, -2, CString::new("compile").unwrap().as_ptr());
 
-    // Set this new table as the __index field of the metatable
+    // Set the table as the __index metamethod for the Compiler metatable
     lua_setfield(L, -2, CString::new("__index").unwrap().as_ptr());
 
     // Remove the metatable from the stack
     lua_pop(L, 1);
 
-    // Create a new table for the library and set its fields
+    // Create a new table to hold the library's functions
     lua_newtable(L);
 
-    // Add compiler_new as a function in this table
+    // Push the compiler_new function onto the stack
     lua_pushcfunction(L, Some(compiler_new));
+    // Set the function as the value for the "compiler" key in the table
     lua_setfield(L, -2, CString::new("compiler").unwrap().as_ptr());
 
+    // Return 1 to Lua, indicating that we've left one return value on the stack (the library table)
     1
 }
