@@ -47,7 +47,7 @@ unsafe extern "C" fn compiler_compile(L: *mut lua_State) -> c_int {
     let compiler = &mut **compiler_ptr_ptr;
 
     // Call the compile method on the Compiler and handle the result
-    let result = compiler.compile(PathBuf::from(input), Some(serde_json::from_str(&json).unwrap()));
+    let result = compiler.compile(PathBuf::from(input), Some(serde_json::from_str(&json).expect("Could not parse jsonfrom input")));
 
     // Match on the result to handle potential errors
     match result {
