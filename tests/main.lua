@@ -1,6 +1,6 @@
 package.cpath = package.cpath .. ';?.so'
 print("package.cpath:", package.cpath)
-local json = require"tests.dkjson"
+local json = require"dkjson"
 local typst = require"typst"
 
 local dados = {

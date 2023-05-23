@@ -6,10 +6,10 @@ edition = "2018"
 
 # Add this line
 [lib]
+name = "typst"
 crate-type = ["cdylib"]
 
 [dependencies]
-#typst-genpdf = { git = "https://github.com/rousbound/typst-genpdf" }
 typst-compiler = { path = "../typst-compiler" }
 libc = "0.2"
 serde_json = "1.0"

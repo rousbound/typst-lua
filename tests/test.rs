@@ -1,10 +1,8 @@
-use rlua::Lua;
 use std::fs;
 use std::process;
 
 #[test]
 fn test_typst_lua() {
-    let lua = Lua::new();
 
     let cmd = process::Command::new("lua")
         .arg("tests/main.lua")
