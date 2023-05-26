@@ -35,6 +35,16 @@ unsafe extern "C" fn compiler_new(L: *mut lua_State) -> c_int {
     1
 }
 
+unsafe extern "C" fn compiler_delete(L: *mut lua_State) -> c_int {
+    // Get the raw Compiler pointer from the first argument (the userdata)
+    let compiler_ptr_ptr = luaL_checkudata(L, 1, CString::new("typst_Compiler").unwrap().as_ptr()) as *mut *mut Compiler;
+    // Dereference the pointer and drop the Box, deallocating the Compiler
+    Box::from_raw(*compiler_ptr_ptr);
+    // Return 0 to Lua, as we don't push anything onto the stack
+    0
+}
+
+
 // Define a C-compatible function for the compile method
 unsafe extern "C" fn compiler_compile(L: *mut lua_State) -> c_int {
     // Grab the second and third arguments from the Lua stack as raw C strings
@@ -65,6 +75,10 @@ unsafe extern "C" fn compiler_compile(L: *mut lua_State) -> c_int {
             // Push error message onto the Lua stack
             let error_message = CString::new(e.to_string()).unwrap();
             lua_pushlstring(L, error_message.as_ptr(), error_message.to_bytes().len() as size_t);
+            // Maybe I need to push the nul byte terminator, haven't tested it
+            //let error_message = CString::new(e.to_string()).unwrap();
+            //lua_pushlstring(L, error_message.as_ptr(), error_message.to_bytes_with_nul().len() as size_t);
+
             // Return 2 to Lua, indicating that we've left two return values on the stack
             2
         }
@@ -87,6 +101,11 @@ pub unsafe extern "C" fn luaopen_typst(L: *mut lua_State) -> c_int {
 
     // Set the table as the __index metamethod for the Compiler metatable
     lua_setfield(L, -2, CString::new("__index").unwrap().as_ptr());
+
+    // Push the compiler_delete function onto the stack
+    lua_pushcfunction(L, Some(compiler_delete));
+    // Set the function as the value for the "__gc" key in the metatable
+    lua_setfield(L, -2, CString::new("__gc").unwrap().as_ptr());
 
     // Remove the metatable from the stack
     lua_pop(L, 1);
