@@ -14,20 +14,21 @@ luarocks install typst-lua
 
 ```lua
 local typst = require"typst"
+local json = require"dkjson"
 
 
 -----------------------------------------------------
 -- Change root of module
--- @param Option<String> string do path desejado
+-- @param Option<String> desired root path
 compiler = typst.compiler("templates")
 
 -----------------------------------------------------
 -- Compiles pdf with given template
 -- @param String template name
--- @param Option<String> string de dados json 
--- @return Option<Array> de bytes do pdf
-local pdf_bytes = compiler:compile("hello.typ", { table = {data = "test"} } )
-local pdf_bytes = compiler:compile("hello.typ", { json = json.encode{data = "test"} } )
+-- @param Option<String> json string
+-- @return Option<Array> pdf bytes
+-- @return Option<String> error message
+local pdf_bytes, err = compiler:compile("hello.typ", json.encode{data = "test"} )
 
 ```
 
