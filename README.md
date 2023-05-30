@@ -20,15 +20,21 @@ local json = require"dkjson"
 -----------------------------------------------------
 -- Change root of module
 -- @param Option<String> desired root path
-compiler = typst.compiler("templates")
+local compiler = typst.compiler("templates")
 
 -----------------------------------------------------
 -- Compiles pdf with given template
+-- Can accept json data to be stored in the _JSON variable
+-- Example in typst:
+-- #let data = _JSON
 -- @param String template name
 -- @param Option<String> json string
 -- @return Option<Array> pdf bytes
 -- @return Option<String> error message
-local pdf_bytes, err = compiler:compile("hello.typ", json.encode{data = "test"} )
+local pdf_bytes, err = compiler:compile(
+	"helloworld.typ",
+	json.encode{data = "Hello World!"}
+)
 
 ```
 
