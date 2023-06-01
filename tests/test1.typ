@@ -5,5 +5,7 @@
 #_JSON.aaaa.b
 #_JSON.aaaa.c
 #_JSON.aaaa.d.a
+#_JSON.titulo_obtido
+#_JSON.resumo
 
 /*#_JSON.aprovacao*/

@@ -13,25 +13,32 @@ unsafe fn lua_to_rust_string(L: *mut lua_State, index: c_int) -> String {
     CStr::from_ptr(raw_str).to_str().unwrap().to_owned()
 }
 
-unsafe fn lua_table_is_array(L: *mut lua_State, index: c_int) -> bool {
-    lua_pushnil(L);
-    let mut max = 0;
-    while lua_next(L, index) != 0 {
-        if lua_type(L, -2) == LUA_TNUMBER {
-            let key = lua_tointeger(L, -2);
-            if key > max {
-                max = key;
-            }
-        } else {
-            lua_pop(L, 2);
-            return false;
-        }
+unsafe fn lua_table_is_array(L: *mut lua_State, mut index: c_int) -> bool {
+    index = lua_absindex(L, index);
+    let mut i = 1;
+    loop {
+        lua_pushinteger(L, i);
+        lua_gettable(L, index);
+        let is_nil = lua_type(L, -1) == LUA_TNIL;
         lua_pop(L, 1);
+        if is_nil {
+            break;
+        }
+        i += 1;
     }
-    max == lua_rawlen(L, index) as i64
+
+    let mut total_keys = 0;
+    lua_pushnil(L);
+    while lua_next(L, index) != 0 {
+        lua_pop(L, 1);
+        total_keys += 1;
+    }
+
+    i - 1 == total_keys
 }
 
-unsafe fn lua_table_to_json_value(L: *mut lua_State, index: c_int) -> Result<Value, &'static str> {
+unsafe fn lua_table_to_json_value(L: *mut lua_State, mut index: c_int) -> Result<Value, &'static str> {
+    index = lua_absindex(L, index);
     if lua_table_is_array(L, index) {
         let mut vec = Vec::new();
         lua_pushnil(L);
