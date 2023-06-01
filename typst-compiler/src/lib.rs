@@ -90,6 +90,11 @@ impl SystemWorld {
 }
 
 impl World for SystemWorld {
+    fn today(&self, _: Option<i64>) -> Option<typst::eval::Datetime>
+    {
+        todo!()
+    }
+
     fn root(&self) -> &Path {
         &self.root
     }

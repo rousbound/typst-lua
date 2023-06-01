@@ -5,11 +5,72 @@ use typst_compiler::Compiler;
 use std::path::PathBuf;
 use libc::{size_t, c_void};
 
-// Helper function to convert Lua strings to Rust String
+use serde_json::{Value,Map};
+
 unsafe fn lua_to_rust_string(L: *mut lua_State, index: c_int) -> String {
-    let raw_str = lua_tostring(L, index);
-    CStr::from_ptr(raw_str).to_string_lossy().into_owned()
+    let mut size: size_t = 0;
+    let raw_str = lua_tolstring(L, index, &mut size);
+    CStr::from_ptr(raw_str).to_str().unwrap().to_owned()
 }
+
+unsafe fn lua_table_is_array(L: *mut lua_State, index: c_int) -> bool {
+    lua_pushnil(L);
+    let mut max = 0;
+    while lua_next(L, index) != 0 {
+        if lua_type(L, -2) == LUA_TNUMBER {
+            let key = lua_tointeger(L, -2);
+            if key > max {
+                max = key;
+            }
+        } else {
+            lua_pop(L, 2);
+            return false;
+        }
+        lua_pop(L, 1);
+    }
+    max == lua_rawlen(L, index) as i64
+}
+
+unsafe fn lua_table_to_json_value(L: *mut lua_State, index: c_int) -> Result<Value, &'static str> {
+    if lua_table_is_array(L, index) {
+        let mut vec = Vec::new();
+        lua_pushnil(L);
+        while lua_next(L, index) != 0 {
+            let value = match lua_type(L, -1) {
+                LUA_TSTRING => {
+                    Ok(Value::String(lua_to_rust_string(L, -1)))
+                },
+                LUA_TTABLE => {
+                    lua_table_to_json_value(L, -1)
+                },
+                _ => Err("Type not expected")
+            }?;
+            vec.push(value);
+            lua_pop(L, 1);
+        }
+        Ok(Value::Array(vec))
+    } else {
+        let mut map = Map::new();
+        lua_pushnil(L);
+        while lua_next(L, index) != 0 {
+            let key = lua_to_rust_string(L, -2);
+            let value = match lua_type(L, -1) {
+                LUA_TSTRING => {
+                    Ok(Value::String(lua_to_rust_string(L, -1)))
+                },
+                LUA_TTABLE => {
+                    lua_table_to_json_value(L, -1)
+                },
+                _ => Err("Type not expected")
+            }?;
+            map.insert(key, value);
+            lua_pop(L, 1);
+        }
+        Ok(Value::Object(map))
+    }
+}
+
+
 
 // Define a C-compatible function to create a new Compiler instance
 unsafe extern "C" fn compiler_new(L: *mut lua_State) -> c_int {
@@ -49,7 +110,25 @@ unsafe extern "C" fn compiler_delete(L: *mut lua_State) -> c_int {
 unsafe extern "C" fn compiler_compile(L: *mut lua_State) -> c_int {
     // Grab the second and third arguments from the Lua stack as raw C strings
     let input = lua_to_rust_string(L, 2);
-    let json = lua_to_rust_string(L, 3);
+    //let json = lua_to_rust_string(L, 3);
+
+    let json: Value = match lua_table_to_json_value(L, 3) {
+
+        Err(e) => {
+            // If there was an error, push nil onto the Lua stack
+            lua_pushnil(L);
+            // Push error message onto the Lua stack
+            //let error_message = CString::new(e.to_string()).unwrap();
+            //lua_pushlstring(L, error_message.as_ptr(), error_message.to_bytes().len() as size_t);
+            // Maybe I need to push the nul byte terminator, haven't tested it
+            let error_message = CString::new(e.to_string()).unwrap();
+            lua_pushlstring(L, error_message.as_ptr(), error_message.to_bytes_with_nul().len() as size_t);
+
+            // Return 2 to Lua, indicating that we've left two return values on the stack
+            return 2
+        },
+        Ok(json) => json
+    };
 
     // Get the raw Compiler pointer from the first argument (the userdata)
     let compiler_ptr_ptr = luaL_checkudata(L, 1, CString::new("typst_Compiler").unwrap().as_ptr()) as *mut *mut Compiler;
@@ -57,7 +136,7 @@ unsafe extern "C" fn compiler_compile(L: *mut lua_State) -> c_int {
     let compiler = &mut **compiler_ptr_ptr;
 
     // Call the compile method on the Compiler and handle the result
-    let result = compiler.compile(PathBuf::from(input), Some(serde_json::from_str(&json).expect("Could not parse jsonfrom input")));
+    let result = compiler.compile(PathBuf::from(input), Some(json));
 
     // Match on the result to handle potential errors
     match result {
@@ -73,11 +152,11 @@ unsafe extern "C" fn compiler_compile(L: *mut lua_State) -> c_int {
             // If there was an error, push nil onto the Lua stack
             lua_pushnil(L);
             // Push error message onto the Lua stack
-            let error_message = CString::new(e.to_string()).unwrap();
-            lua_pushlstring(L, error_message.as_ptr(), error_message.to_bytes().len() as size_t);
-            // Maybe I need to push the nul byte terminator, haven't tested it
             //let error_message = CString::new(e.to_string()).unwrap();
-            //lua_pushlstring(L, error_message.as_ptr(), error_message.to_bytes_with_nul().len() as size_t);
+            //lua_pushlstring(L, error_message.as_ptr(), error_message.to_bytes().len() as size_t);
+            // Maybe I need to push the nul byte terminator, haven't tested it
+            let error_message = CString::new(e.to_string()).unwrap();
+            lua_pushlstring(L, error_message.as_ptr(), error_message.to_bytes_with_nul().len() as size_t);
 
             // Return 2 to Lua, indicating that we've left two return values on the stack
             2
