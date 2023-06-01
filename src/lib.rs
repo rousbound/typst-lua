@@ -5,7 +5,7 @@ use typst_compiler::Compiler;
 use std::path::PathBuf;
 use libc::{size_t, c_void};
 
-use serde_json::{Value,Map};
+use serde_json::{Value,Map, Number};
 
 unsafe fn lua_to_rust_string(L: *mut lua_State, index: c_int) -> String {
     let mut size: size_t = 0;
@@ -50,6 +50,13 @@ unsafe fn lua_table_to_json_value(L: *mut lua_State, mut index: c_int) -> Result
                 LUA_TTABLE => {
                     lua_table_to_json_value(L, -1)
                 },
+                LUA_TNUMBER => {
+                    let number = lua_tonumber(L, -1);
+                        match Number::from_f64(number) {
+                            Some(json_number) => Ok(Value::Number(json_number)),
+                            None => Err("Invalid number"),
+                        }
+                },
                 _ => Err("Type not expected")
             }?;
             vec.push(value);
@@ -68,6 +75,14 @@ unsafe fn lua_table_to_json_value(L: *mut lua_State, mut index: c_int) -> Result
                 LUA_TTABLE => {
                     lua_table_to_json_value(L, -1)
                 },
+                                LUA_TNUMBER => {
+                    let number = lua_tonumber(L, -1);
+                        match Number::from_f64(number) {
+                            Some(json_number) => Ok(Value::Number(json_number)),
+                            None => Err("Invalid number"),
+                        }
+                },
+
                 _ => Err("Type not expected")
             }?;
             map.insert(key, value);
