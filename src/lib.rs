@@ -1,16 +1,31 @@
-use std::ffi::{CStr, CString};
+use std::{
+    ffi::{CStr, CString},
+    os::raw::c_int,
+    path::PathBuf,
+};
+
 use lua_sys::*;
-use std::os::raw::c_int;
 use typst_compiler::Compiler;
-use std::path::PathBuf;
 use libc::{size_t, c_void};
+use serde_json::{Value, Map, Number};
 
-use serde_json::{Value,Map, Number};
-
+// Helper function to retrieve a string from the Lua state and convert it to a Rust string.
 unsafe fn lua_to_rust_string(L: *mut lua_State, index: c_int) -> String {
     let mut size: size_t = 0;
     let raw_str = lua_tolstring(L, index, &mut size);
     CStr::from_ptr(raw_str).to_str().unwrap().to_owned()
+}
+
+// Helper function to add a Lua method to the table at the given index.
+unsafe fn lua_add_method(
+    L: *mut lua_State,
+    index: c_int,
+    name: &'static str,
+    f: unsafe extern "C" fn(*mut lua_State) -> c_int)
+{
+
+    lua_pushcfunction(L, Some(f));
+    lua_setfield(L, index, CString::new(name).unwrap().as_ptr());
 }
 
 unsafe fn lua_table_is_array(L: *mut lua_State, mut index: c_int) -> bool {
@@ -196,17 +211,13 @@ pub unsafe extern "C" fn luaopen_typst(L: *mut lua_State) -> c_int {
     lua_newtable(L);
 
     // Push the compiler_compile function onto the stack
-    lua_pushcfunction(L, Some(compiler_compile));
-    // Set the function as the value for the "compile" key in the table
-    lua_setfield(L, -2, CString::new("compile").unwrap().as_ptr());
+    lua_add_method(L, -2, "compile", compiler_compile); // Add the compile method to it
 
     // Set the table as the __index metamethod for the Compiler metatable
     lua_setfield(L, -2, CString::new("__index").unwrap().as_ptr());
 
-    // Push the compiler_delete function onto the stack
-    lua_pushcfunction(L, Some(compiler_delete));
-    // Set the function as the value for the "__gc" key in the metatable
-    lua_setfield(L, -2, CString::new("__gc").unwrap().as_ptr());
+
+    lua_add_method(L, -2, "__gc", compiler_delete); // Add the __gc method directly to the metatable
 
     // Remove the metatable from the stack
     lua_pop(L, 1);
@@ -214,10 +225,7 @@ pub unsafe extern "C" fn luaopen_typst(L: *mut lua_State) -> c_int {
     // Create a new table to hold the library's functions
     lua_newtable(L);
 
-    // Push the compiler_new function onto the stack
-    lua_pushcfunction(L, Some(compiler_new));
-    // Set the function as the value for the "compiler" key in the table
-    lua_setfield(L, -2, CString::new("compiler").unwrap().as_ptr());
+    lua_add_method(L, -2, "compiler", compiler_new); // Add the __gc method directly to the metatable
 
     // Return 1 to Lua, indicating that we've left one return value on the stack (the library table)
     1
