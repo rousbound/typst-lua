@@ -18,7 +18,7 @@ use same_file::{is_same_file, Handle};
 use siphasher::sip128::{Hasher128, SipHasher13};
 use termcolor::{ColorChoice, StandardStream, WriteColor};
 use typst::diag::{FileError, FileResult, SourceError, StrResult};
-use typst::eval::{Library,Value};
+use typst::eval::{Library, Value, Dict};
 use typst::font::{Font, FontBook, FontInfo, FontVariant};
 use typst::syntax::{Source, SourceId};
 use typst::util::{Buffer, PathExt};
@@ -40,27 +40,6 @@ struct SystemWorld {
     paths: RefCell<HashMap<PathHash, PathSlot>>,
     sources: FrozenVec<Box<Source>>,
     main: SourceId,
-}
-
-/// Convert a JSON value to a Typst value.
-pub fn convert_json(value: serde_json::Value) -> Value {
-    match value {
-        serde_json::Value::Null => Value::None,
-        serde_json::Value::Bool(v) => Value::Bool(v),
-        serde_json::Value::Number(v) => match v.as_i64() {
-            Some(int) => Value::Int(int),
-            None => Value::Float(v.as_f64().unwrap_or(f64::NAN)),
-        },
-        serde_json::Value::String(v) => Value::Str(v.into()),
-        serde_json::Value::Array(v) => {
-            Value::Array(v.into_iter().map(convert_json).collect())
-        }
-        serde_json::Value::Object(v) => Value::Dict(
-            v.into_iter()
-                .map(|(key, value)| (key.into(), convert_json(value)))
-                .collect(),
-        ),
-    }
 }
 
 impl SystemWorld {
@@ -261,12 +240,12 @@ impl Compiler {
     pub fn compile(
         &mut self,
         input: PathBuf,
-        json: Option<serde_json::Value>
+        dict: Option<Value>
         ) -> StrResult<Vec<u8>> 
     {
 
-        if let Some(json) = json {
-            self.world.declare_global_value("_JSON", convert_json(json));
+        if let Some(dict) = dict {
+            self.world.declare_global_value("_DICT", dict);
         };
         self.world.reset();
         self.world.main = self.world.resolve(&self.world.root.join(&input)).map_err(|e| e )?;

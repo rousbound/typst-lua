@@ -2181,9 +2181,11 @@ dependencies = [
 name = "typst-lua"
 version = "0.1.0"
 dependencies = [
+ "ecow",
  "libc",
  "lua-sys",
  "serde_json",
+ "typst",
  "typst-compiler",
 ]
 

@@ -7,7 +7,9 @@ use std::{
 use lua_sys::*;
 use typst_compiler::Compiler;
 use libc::{size_t, c_void};
-use serde_json::{Value, Map, Number};
+use typst::eval::{Value, Dict, Array};
+use typst::eval::Str;
+use ecow::EcoString;
 
 // Helper function to retrieve a string from the Lua state and convert it to a Rust string.
 unsafe fn lua_to_rust_string(L: *mut lua_State, index: c_int) -> String {
@@ -52,58 +54,75 @@ unsafe fn lua_table_is_array(L: *mut lua_State, mut index: c_int) -> bool {
     i - 1 == total_keys
 }
 
-unsafe fn lua_table_to_json_value(L: *mut lua_State, mut index: c_int) -> Result<Value, &'static str> {
+
+//pub fn convert_json(value: serde_json::Value) -> Value {
+    //match value {
+        //serde_json::Value::Null => Value::None,
+        //serde_json::Value::Bool(v) => Value::Bool(v),
+        //serde_json::Value::Number(v) => match v.as_i64() {
+            //Some(int) => Value::Int(int),
+            //None => Value::Float(v.as_f64().unwrap_or(f64::NAN)),
+        //},
+        //serde_json::Value::String(v) => Value::Str(v.into()),
+        //serde_json::Value::Array(v) => {
+            //Value::Array(v.into_iter().map(convert_json).collect())
+        //}
+        //serde_json::Value::Object(v) => Value::Dict(
+            //v.into_iter()
+                //.map(|(key, value)| (key.into(), convert_json(value)))
+                //.collect(),
+        //),
+    //}
+//}
+
+unsafe fn lua_table_to_typst_dict(L: *mut lua_State, mut index: c_int) -> Result<Value, &'static str> {
     index = lua_absindex(L, index);
     if lua_table_is_array(L, index) {
-        let mut vec = Vec::new();
+        let mut arr = Array::new();
         lua_pushnil(L);
         while lua_next(L, index) != 0 {
             let value = match lua_type(L, -1) {
                 LUA_TSTRING => {
-                    Ok(Value::String(lua_to_rust_string(L, -1)))
+                    Ok(Value::Str(lua_to_rust_string(L, -1).into()))
                 },
                 LUA_TTABLE => {
-                    lua_table_to_json_value(L, -1)
+                    Ok(lua_table_to_typst_dict(L, -1).unwrap())
                 },
                 LUA_TNUMBER => {
                     let number = lua_tonumber(L, -1);
-                        match Number::from_f64(number) {
-                            Some(json_number) => Ok(Value::Number(json_number)),
-                            None => Err("Invalid number"),
-                        }
+                    Ok(Value::Float(number))
+
                 },
                 _ => Err("Type not expected")
             }?;
-            vec.push(value);
+            arr.push(value);
             lua_pop(L, 1);
         }
-        Ok(Value::Array(vec))
+        Ok(Value::Array(arr))
     } else {
-        let mut map = Map::new();
+        let mut map = Dict::new();
         lua_pushnil(L);
         while lua_next(L, index) != 0 {
             let key = lua_to_rust_string(L, -2);
             let value = match lua_type(L, -1) {
                 LUA_TSTRING => {
-                    Ok(Value::String(lua_to_rust_string(L, -1)))
+                    Ok(Value::Str(lua_to_rust_string(L, -1).into()))
                 },
                 LUA_TTABLE => {
-                    lua_table_to_json_value(L, -1)
+                    Ok(lua_table_to_typst_dict(L, -1).unwrap())
                 },
-                                LUA_TNUMBER => {
+                LUA_TNUMBER => {
                     let number = lua_tonumber(L, -1);
-                        match Number::from_f64(number) {
-                            Some(json_number) => Ok(Value::Number(json_number)),
-                            None => Err("Invalid number"),
-                        }
+                    Ok(Value::Float(number))
+
                 },
 
                 _ => Err("Type not expected")
             }?;
-            map.insert(key, value);
+            map.insert(key.into(), value);
             lua_pop(L, 1);
         }
-        Ok(Value::Object(map))
+        Ok(Value::Dict(map))
     }
 }
 
@@ -149,7 +168,7 @@ unsafe extern "C" fn compiler_compile(L: *mut lua_State) -> c_int {
     let input = lua_to_rust_string(L, 2);
     //let json = lua_to_rust_string(L, 3);
 
-    let json: Value = match lua_table_to_json_value(L, 3) {
+    let json: Value = match lua_table_to_typst_dict(L, 3) {
 
         Err(e) => {
             // If there was an error, push nil onto the Lua stack
