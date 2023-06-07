@@ -30,98 +30,66 @@ unsafe fn lua_add_method(
     lua_setfield(L, index, CString::new(name).unwrap().as_ptr());
 }
 
-unsafe fn lua_table_is_array(L: *mut lua_State, mut index: c_int) -> bool {
-    index = lua_absindex(L, index);
-    let mut i = 1;
-    loop {
-        lua_pushinteger(L, i);
-        lua_gettable(L, index);
-        let is_nil = lua_type(L, -1) == LUA_TNIL;
-        lua_pop(L, 1);
-        if is_nil {
-            break;
-        }
-        i += 1;
-    }
 
-    let mut total_keys = 0;
-    lua_pushnil(L);
-    while lua_next(L, index) != 0 {
-        lua_pop(L, 1);
-        total_keys += 1;
-    }
-
-    i - 1 == total_keys
+unsafe fn lua_to_rust_string_no_pop(L: *mut lua_State, index: c_int) -> String {
+    let mut size: size_t = 0;
+    let raw_str = lua_tolstring(L, index, &mut size);
+    CStr::from_ptr(raw_str).to_str().unwrap().to_owned()
 }
-
-
-//pub fn convert_json(value: serde_json::Value) -> Value {
-    //match value {
-        //serde_json::Value::Null => Value::None,
-        //serde_json::Value::Bool(v) => Value::Bool(v),
-        //serde_json::Value::Number(v) => match v.as_i64() {
-            //Some(int) => Value::Int(int),
-            //None => Value::Float(v.as_f64().unwrap_or(f64::NAN)),
-        //},
-        //serde_json::Value::String(v) => Value::Str(v.into()),
-        //serde_json::Value::Array(v) => {
-            //Value::Array(v.into_iter().map(convert_json).collect())
-        //}
-        //serde_json::Value::Object(v) => Value::Dict(
-            //v.into_iter()
-                //.map(|(key, value)| (key.into(), convert_json(value)))
-                //.collect(),
-        //),
-    //}
-//}
 
 unsafe fn lua_table_to_typst_dict(L: *mut lua_State, mut index: c_int) -> Result<Value, &'static str> {
     index = lua_absindex(L, index);
-    if lua_table_is_array(L, index) {
-        let mut arr = Array::new();
-        lua_pushnil(L);
-        while lua_next(L, index) != 0 {
-            let value = match lua_type(L, -1) {
-                LUA_TSTRING => {
-                    Ok(Value::Str(lua_to_rust_string(L, -1).into()))
-                },
-                LUA_TTABLE => {
-                    Ok(lua_table_to_typst_dict(L, -1).unwrap())
-                },
-                LUA_TNUMBER => {
-                    let number = lua_tonumber(L, -1);
-                    Ok(Value::Float(number))
 
-                },
-                _ => Err("Type not expected")
-            }?;
-            arr.push(value);
-            lua_pop(L, 1);
+    let mut arr = Array::new();
+    let mut map = Dict::new();
+    let mut is_array = true;
+    let mut expected_key = 1;
+
+    lua_pushnil(L);
+    while lua_next(L, index) != 0 {
+        let value = match lua_type(L, -1) {
+            LUA_TSTRING => {
+                Ok(Value::Str(lua_to_rust_string_no_pop(L, -1).into()))
+            },
+            LUA_TTABLE => {
+                Ok(lua_table_to_typst_dict(L, -1).unwrap())
+            },
+            LUA_TNUMBER => {
+                let number = lua_tonumber(L, -1);
+                Ok(Value::Float(number))
+            },
+            _ => Err("Type not expected")
+        }?;
+        // Check the key type
+        match lua_type(L, -2) {
+            LUA_TNUMBER => {
+                let key_as_int = lua_tonumber(L, -2) as i32;
+                if key_as_int != expected_key {
+                    is_array = false;
+                }
+                expected_key += 1;
+                if is_array {
+                    arr.push(value.clone());
+                }
+                let key = key_as_int.to_string();
+                map.insert(key.into(), value);
+            },
+            LUA_TSTRING => {
+                is_array = false;
+                let key = lua_to_rust_string_no_pop(L, -2);
+                map.insert(key.into(), value);
+            },
+            _ => {
+                lua_pop(L, 1);
+                return Err("Non-string or non-number key found");
+            },
         }
+        lua_pop(L, 1); // Pop the value
+    }
+
+    if is_array {
         Ok(Value::Array(arr))
     } else {
-        let mut map = Dict::new();
-        lua_pushnil(L);
-        while lua_next(L, index) != 0 {
-            let key = lua_to_rust_string(L, -2);
-            let value = match lua_type(L, -1) {
-                LUA_TSTRING => {
-                    Ok(Value::Str(lua_to_rust_string(L, -1).into()))
-                },
-                LUA_TTABLE => {
-                    Ok(lua_table_to_typst_dict(L, -1).unwrap())
-                },
-                LUA_TNUMBER => {
-                    let number = lua_tonumber(L, -1);
-                    Ok(Value::Float(number))
-
-                },
-
-                _ => Err("Type not expected")
-            }?;
-            map.insert(key.into(), value);
-            lua_pop(L, 1);
-        }
         Ok(Value::Dict(map))
     }
 }

@@ -11,7 +11,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 typst-compiler = { path = "typst-compiler" }
-typst = { git = "https://github.com/typst/typst" }
+typst = { git = "https://github.com/typst/typst", package = "typst"}
 libc = "0.2"
 serde_json = "1.0"
 lua-sys = "0.2.0"

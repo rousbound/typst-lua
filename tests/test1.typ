@@ -1,11 +1,12 @@
 #set text(font:"New Computer Modern")
-#_JSON.name
-#_JSON.okokok
-#_JSON.aaaa.a
-#_JSON.aaaa.b
-#_JSON.aaaa.c
-#_JSON.aaaa.d.a
-#_JSON.titulo_obtido
-#_JSON.resumo
+#_DICT.name
+#_DICT.okokok
+#_DICT.aaaa.a
+#_DICT.aaaa.b
+#_DICT.aaaa.c
+#_DICT.aaaa.d.a
+#_DICT.titulo_obtido
+#_DICT.resumo
 
-/*#_JSON.aprovacao*/
+#_DICT.aprovacao
+#_DICT.banca.at(1).afiliacao

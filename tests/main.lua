@@ -104,9 +104,9 @@ local dados = {
 	["programa"]="Programa de Pós-Graduação em Informática",
 	["resultado"]="Aprovado(a)",
 	["resumo"]="O conceito de co-rotinas,introduzido na década de 60, constitui uma dasprimeiras propostas de uma abstração genérica de controle. Apesar dessaabstração ter sido bastante explorada para a implementação de diversoscomportamentos interessantes, são raros os exemplos de linguagens que oferecem co-rotinas.Além da ausência de uma definição precisa para o conceito, a introdução decontinuações de primeira classe e a adoção do modelo de multithreading como um padrâo para a programação concorrente muito contribuiram para o virtual abandono do interesse em co-rotinas.Esse trabalho defende o resgate de co-rotinas como uma abstração de controlepoderosa e conveniente, que pode substituir tanto continuações como threads com um conceito único e muito mais simples. Para suprir a ausência de uma definição precisa, propomos um sistema para a classificação de co-rotinas, e introduzimos o conceito de co-rotinas completas, para o qual provemos uma descrição formal, baseada em uma semântica operacional. Demostramos a seguir a equivalência de poder expressivo entre co-rotinas completas e continuaçôes one-shot, e discutimos as vantagens do uso de co-rotinas completas assimétricas ao invés deco-rotinas simétricas ou continuações, sejam elas tradicionais ou parciais.Apresentamos também exemplos de implementação de diferentes estruturas de controle com co-rotinas completas assimétricas.Finalmente, propomos um sistema de classificação para modelos de concorrência, discutindo os problemas e benefícios relacionados a cada tipo de modelo. Exploramos então o uso de co-rotinas para o suporte ao desenvolvimento de programas concorrentes baseados em modelos de gerência cooperativa de tarefas e em orientação a eventos.",
-	["tipo_doc"]="tese",
-	["titulo"]="Revisitando co-rotinas",
-	["titulo_concedido"]="Doutor",
+	--["tipo_doc"]="tese",
+	--["titulo"]="Revisitando co-rotinas",
+	--["titulo_concedido"]="Doutor",
 	["titulo_obtido"]="Doutor em Ciências - Informática"
 }
 local compiler = typst.compiler(".") -- Seta o root do World
