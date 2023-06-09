@@ -6,10 +6,8 @@ use std::{
 
 use lua_sys::*;
 use typst_compiler::Compiler;
-use libc::{size_t, c_void};
+use libc::{size_t};
 use typst::eval::{Value, Dict, Array};
-use typst::eval::Str;
-use ecow::EcoString;
 
 // Helper function to retrieve a string from the Lua state and convert it to a Rust string.
 unsafe fn lua_to_rust_string(L: *mut lua_State, index: c_int) -> String {
@@ -32,8 +30,7 @@ unsafe fn lua_add_method(
 
 
 unsafe fn lua_to_rust_string_no_pop(L: *mut lua_State, index: c_int) -> String {
-    let mut size: size_t = 0;
-    let raw_str = lua_tolstring(L, index, &mut size);
+    let raw_str = lua_tolstring(L, index, &mut 0);
     CStr::from_ptr(raw_str).to_str().unwrap().to_owned()
 }
 
@@ -124,7 +121,7 @@ unsafe extern "C" fn compiler_delete(L: *mut lua_State) -> c_int {
     // Get the raw Compiler pointer from the first argument (the userdata)
     let compiler_ptr_ptr = luaL_checkudata(L, 1, CString::new("typst_Compiler").unwrap().as_ptr()) as *mut *mut Compiler;
     // Dereference the pointer and drop the Box, deallocating the Compiler
-    Box::from_raw(*compiler_ptr_ptr);
+    drop(Box::from_raw(*compiler_ptr_ptr));
     // Return 0 to Lua, as we don't push anything onto the stack
     0
 }
@@ -132,60 +129,40 @@ unsafe extern "C" fn compiler_delete(L: *mut lua_State) -> c_int {
 
 // Define a C-compatible function for the compile method
 unsafe extern "C" fn compiler_compile(L: *mut lua_State) -> c_int {
-    // Grab the second and third arguments from the Lua stack as raw C strings
+    // Grab the second argument from the Lua stack as raw C string
     let input = lua_to_rust_string(L, 2);
-    //let json = lua_to_rust_string(L, 3);
 
-    let json: Value = match lua_table_to_typst_dict(L, 3) {
+    let mut data: Option<Value> = None;
+    // Check if the third argument is nil
+    if lua_isnil(L, 3) != 0 {
+    } else {
+        data = match lua_table_to_typst_dict(L, 3) {
+            Err(e) => {
+                let error_message = CString::new(e.to_string()).unwrap();
+                lua_pushlstring(L, error_message.as_ptr(), error_message.to_bytes_with_nul().len() as size_t);
+                return 2;
+            },
+            Ok(data) => Some(data),
+        };
+    }
 
-        Err(e) => {
-            // If there was an error, push nil onto the Lua stack
-            lua_pushnil(L);
-            // Push error message onto the Lua stack
-            //let error_message = CString::new(e.to_string()).unwrap();
-            //lua_pushlstring(L, error_message.as_ptr(), error_message.to_bytes().len() as size_t);
-            // Maybe I need to push the nul byte terminator, haven't tested it
-            let error_message = CString::new(e.to_string()).unwrap();
-            lua_pushlstring(L, error_message.as_ptr(), error_message.to_bytes_with_nul().len() as size_t);
-
-            // Return 2 to Lua, indicating that we've left two return values on the stack
-            return 2
-        },
-        Ok(json) => json
-    };
-
-    // Get the raw Compiler pointer from the first argument (the userdata)
     let compiler_ptr_ptr = luaL_checkudata(L, 1, CString::new("typst_Compiler").unwrap().as_ptr()) as *mut *mut Compiler;
-    // Dereference the pointer to obtain a mutable reference to the Compiler
     let compiler = &mut **compiler_ptr_ptr;
 
-    // Call the compile method on the Compiler and handle the result
-    let result = compiler.compile(PathBuf::from(input), Some(json));
+    let result = compiler.compile(PathBuf::from(input), data);
 
-    // Match on the result to handle potential errors
     match result {
         Ok(bytes) => {
-            // If successful, push the resulting bytes onto the Lua stack
             lua_pushlstring(L, bytes.as_ptr() as *const i8, bytes.len() as size_t);
-            // Push nil into the stack for the error message
             lua_pushnil(L);
-            // Return 2 to Lua, indicating that we've left two return values on the stack
             2
         }
         Err(e) => {
-            // If there was an error, push nil onto the Lua stack
-            lua_pushnil(L);
-            // Push error message onto the Lua stack
-            //let error_message = CString::new(e.to_string()).unwrap();
-            //lua_pushlstring(L, error_message.as_ptr(), error_message.to_bytes().len() as size_t);
-            // Maybe I need to push the nul byte terminator, haven't tested it
             let error_message = CString::new(e.to_string()).unwrap();
             lua_pushlstring(L, error_message.as_ptr(), error_message.to_bytes_with_nul().len() as size_t);
-
-            // Return 2 to Lua, indicating that we've left two return values on the stack
             2
         }
-}
+    }
 }
 
 // Define a C-compatible function to be called when the library is loaded

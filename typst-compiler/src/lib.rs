@@ -2,23 +2,18 @@ use std::cell::{RefCell, RefMut};
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::hash::Hash;
-use std::io::{self, Write};
 use std::path::{Path, PathBuf};
-use std::process;
-use std::error;
 
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use codespan_reporting::term::{self, termcolor};
 use comemo::Prehashed;
 use elsa::FrozenVec;
 use memmap2::Mmap;
-use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use once_cell::unsync::OnceCell;
-use same_file::{is_same_file, Handle};
+use same_file::{Handle};
 use siphasher::sip128::{Hasher128, SipHasher13};
-use termcolor::{ColorChoice, StandardStream, WriteColor};
 use typst::diag::{FileError, FileResult, SourceError, StrResult};
-use typst::eval::{Library, Value, Dict};
+use typst::eval::{Library, Value};
 use typst::font::{Font, FontBook, FontInfo, FontVariant};
 use typst::syntax::{Source, SourceId};
 use typst::util::{Buffer, PathExt};
@@ -28,7 +23,6 @@ use tempfile;
 
 use typst_library::prelude::EcoString;
 
-use serde_json::{json};
 
 /// A world that provides access to the operating system.
 struct SystemWorld {
@@ -47,7 +41,7 @@ impl SystemWorld {
         let mut searcher = FontSearcher::new();
         searcher.search(font_paths);
 
-        let mut library = typst_library::build();
+        let library = typst_library::build();
 
         Self {
             root,
@@ -99,7 +93,7 @@ impl World for SystemWorld {
     }
 
     fn source(&self, id: SourceId) -> &Source {
-        &self.sources[id.into_u16() as usize]
+        &self.sources[id.as_u16() as usize]
     }
 
     fn book(&self) -> &Prehashed<FontBook> {
@@ -227,6 +221,9 @@ fn get_diagnostics(
 pub struct Compiler {
     world: SystemWorld,
 }
+
+
+
 
 impl Compiler {
 

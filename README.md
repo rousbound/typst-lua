@@ -2,7 +2,7 @@
 
 
 Lua binding to [typst](https://github.com/typst/typst),
-a new markup-based typesetting system that is powerful and easy to learn.
+a new markup-based typesetting system that is powerful and easy to learn. Also has a feature to pass lua tables directly to typst dicts.
 
 ## Installation
 
@@ -14,7 +14,6 @@ luarocks install typst-lua
 
 ```lua
 local typst = require"typst"
-local json = require"dkjson"
 
 
 -----------------------------------------------------
@@ -24,19 +23,34 @@ local compiler = typst.compiler("templates")
 
 -----------------------------------------------------
 -- Compiles pdf with given template
--- Can accept json data to be stored in the _JSON variable
--- Example in typst:
--- #let data = _JSON
+-- Can accept json data to be stored in the _DICT variable
 -- @param String template name
--- @param Option<String> json string
+-- @param Option<Table> data
 -- @return Option<Array> pdf bytes
 -- @return Option<String> error message
 local pdf_bytes, err = compiler:compile(
 	"helloworld.typ",
-	json.encode{data = "Hello World!"}
+	{world = "World!"}
 )
 
 ```
+
+## Example
+
+Example with the lua code above in the following "helloworld.typ" file:
+```typst
+Hello #_DICT.world
+```
+
+Output in pdf will be:
+
+```
+Hello World!
+```
+
+
+
+
 
 ## License
 

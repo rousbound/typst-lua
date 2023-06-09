@@ -15,8 +15,11 @@ typst = { git = "https://github.com/typst/typst", package = "typst"}
 libc = "0.2"
 serde_json = "1.0"
 lua-sys = "0.2.0"
-ecow = "0.1.1"
 
 [profile.release]
 opt-level = 3
+#lto = true
+#codegen-units = 1
+#panic = 'abort'
+
 
