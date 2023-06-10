@@ -14,6 +14,7 @@ luarocks install typst-lua
 
 ```lua
 local typst = require"typst"
+local dkjson = require"dkjson"
 
 
 -----------------------------------------------------
@@ -30,7 +31,9 @@ local compiler = typst.compiler("templates")
 -- @return Option<String> error message
 local pdf_bytes, err = compiler:compile(
 	"helloworld.typ",
-	{world = "World!"}
+	_DICT = typst.lua_table{world = "World!"},
+	_JSON = typst.json(dkjson.encode{world = "World!"}),
+	_TEXT = typst.text"World!"
 )
 
 ```
@@ -40,11 +43,16 @@ local pdf_bytes, err = compiler:compile(
 Example with the lua code above in the following "helloworld.typ" file:
 ```typst
 Hello #_DICT.world
+Hello #_JSON.world
+Hello #_TEXT
+
 ```
 
 Output in pdf will be:
 
 ```
+Hello World!
+Hello World!
 Hello World!
 ```
 
