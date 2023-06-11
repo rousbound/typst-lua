@@ -1,6 +1,4 @@
-package.cpath = "../target/release/?.so;"..package.cpath
 local typst = require"typst"
-local table = require"sintra.table"
 -- Generate color functions in global _ENV scope
 for c, cc in pairs(
 {
@@ -78,5 +76,5 @@ for method, tests in pairs(tests) do
 	for _, key in ipairs(keys) do
 		test(key, tests[key], method)
 	end
-	print(green("All tests were successfull"))
 end
+print(green("All tests were successfull"))
