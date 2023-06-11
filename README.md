@@ -29,7 +29,7 @@ local compiler = typst.compiler("templates")
 -- @param Option<Table> data
 -- @return Option<Array> pdf bytes
 -- @return Option<String> error message
-local pdf_bytes, err = compiler:compile(
+local pdf_bytes, err = compiler:compile_with(
 	"helloworld.typ",
 	_DICT = typst.lua_table{world = "World!"},
 	_JSON = typst.json(dkjson.encode{world = "World!"}),

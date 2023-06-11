@@ -231,6 +231,7 @@ unsafe extern "C" fn compiler_compile_with(L: *mut lua_State) -> c_int {
         }
         Err(e) => {
             let error_message = CString::new(e.to_string()).unwrap();
+            lua_pushnil(L);
             lua_pushlstring(L, error_message.as_ptr(), error_message.to_bytes_with_nul().len() as size_t);
             2
         }
