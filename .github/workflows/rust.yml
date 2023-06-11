@@ -28,7 +28,7 @@ jobs:
     - name: Run Rust tests
       run: cargo test --verbose
     - name: Create Symbolic Link
-      run: ln -s target/release/libtypst.so tests/typst.so
+      run: ln -s target/debug/libtypst.so tests/typst.so
     - name: Run Lua tests
       run: |
         cd tests
