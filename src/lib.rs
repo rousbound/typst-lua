@@ -14,7 +14,7 @@ use typst::eval::{Value, Dict, Array};
 
 unsafe fn create_value_metatable(L: *mut lua_State) {
     // Create a new metatable in the Lua state for Value objects
-    luaL_newmetatable(L, CString::new("typst_Value").unwrap().as_ptr());
+    luaL_newmetatable(L, CString::new("TypstValue").unwrap().as_ptr());
 
     // Add methods to the metatable here. For example:
     // lua_add_method(L, -2, "method_name", function_name);
@@ -27,7 +27,7 @@ unsafe fn create_value_metatable(L: *mut lua_State) {
 }
 
 unsafe extern "C" fn value_delete(L: *mut lua_State) -> c_int {
-    let value_ptr_ptr = luaL_checkudata(L, 1, CString::new("typst_Value").unwrap().as_ptr()) as *mut *mut Value;
+    let value_ptr_ptr = luaL_checkudata(L, 1, CString::new("TypstValue").unwrap().as_ptr()) as *mut *mut Value;
     drop(Box::from_raw(*value_ptr_ptr));
     0
 }
@@ -81,7 +81,7 @@ unsafe extern "C" fn compiler_new(L: *mut lua_State) -> c_int {
     std::ptr::write(userdata as *mut *mut Compiler, compiler_ptr);
 
     // Get the metatable for the Compiler type
-    luaL_getmetatable(L, CString::new("typst_Compiler").unwrap().as_ptr());
+    luaL_getmetatable(L, CString::new("TypstCompiler").unwrap().as_ptr());
     // Set the metatable for the userdata
     lua_setmetatable(L, -2);
 
@@ -91,7 +91,7 @@ unsafe extern "C" fn compiler_new(L: *mut lua_State) -> c_int {
 
 unsafe extern "C" fn compiler_delete(L: *mut lua_State) -> c_int {
     // Get the raw Compiler pointer from the first argument (the userdata)
-    let compiler_ptr_ptr = luaL_checkudata(L, 1, CString::new("typst_Compiler").unwrap().as_ptr()) as *mut *mut Compiler;
+    let compiler_ptr_ptr = luaL_checkudata(L, 1, CString::new("TypstCompiler").unwrap().as_ptr()) as *mut *mut Compiler;
     // Dereference the pointer and drop the Box, deallocating the Compiler
     drop(Box::from_raw(*compiler_ptr_ptr));
     // Return 0 to Lua, as we don't push anything onto the stack
@@ -167,7 +167,7 @@ unsafe extern "C" fn table (L: *mut lua_State) -> c_int {
     let userdata = lua_newuserdata(L, std::mem::size_of::<*mut Value>() as size_t) as *mut *mut Value;
     std::ptr::write(userdata, value_ptr);
 
-    luaL_getmetatable(L, CString::new("typst_Value").unwrap().as_ptr());
+    luaL_getmetatable(L, CString::new("TypstValue").unwrap().as_ptr());
     lua_setmetatable(L, -2);
 
     1
@@ -182,7 +182,7 @@ unsafe extern "C" fn json (L: *mut lua_State) -> c_int {
     let userdata = lua_newuserdata(L, std::mem::size_of::<*mut Value>() as size_t) as *mut *mut Value;
     std::ptr::write(userdata, value_ptr);
 
-    luaL_getmetatable(L, CString::new("typst_Value").unwrap().as_ptr());
+    luaL_getmetatable(L, CString::new("TypstValue").unwrap().as_ptr());
     lua_setmetatable(L, -2);
 
     1
@@ -197,7 +197,7 @@ unsafe extern "C" fn text (L: *mut lua_State) -> c_int {
     let userdata = lua_newuserdata(L, std::mem::size_of::<*mut Value>() as size_t) as *mut *mut Value;
     std::ptr::write(userdata, value_ptr);
 
-    luaL_getmetatable(L, CString::new("typst_Value").unwrap().as_ptr());
+    luaL_getmetatable(L, CString::new("TypstValue").unwrap().as_ptr());
     lua_setmetatable(L, -2);
 
     1
@@ -212,13 +212,13 @@ unsafe extern "C" fn compiler_compile_with(L: *mut lua_State) -> c_int {
     lua_pushnil(L);
     while lua_next(L, 3) != 0 {
         let key = lua_to_rust_str_no_pop(L, -2);
-        let value_ptr_ptr = luaL_checkudata(L, -1, CString::new("typst_Value").unwrap().as_ptr()) as *mut *mut Value;
+        let value_ptr_ptr = luaL_checkudata(L, -1, CString::new("TypstValue").unwrap().as_ptr()) as *mut *mut Value;
         let value = &**value_ptr_ptr;
         data.push((key, value.clone()));
         lua_pop(L, 1);
     }
 
-    let compiler_ptr_ptr = luaL_checkudata(L, 1, CString::new("typst_Compiler").unwrap().as_ptr()) as *mut *mut Compiler;
+    let compiler_ptr_ptr = luaL_checkudata(L, 1, CString::new("TypstCompiler").unwrap().as_ptr()) as *mut *mut Compiler;
     let compiler = &mut **compiler_ptr_ptr;
 
     let result = compiler.compile_with(PathBuf::from(input), &data);
@@ -260,7 +260,7 @@ unsafe extern "C" fn compiler_compile(L: *mut lua_State) -> c_int {
         };
     }
 
-    let compiler_ptr_ptr = luaL_checkudata(L, 1, CString::new("typst_Compiler").unwrap().as_ptr()) as *mut *mut Compiler;
+    let compiler_ptr_ptr = luaL_checkudata(L, 1, CString::new("TypstCompiler").unwrap().as_ptr()) as *mut *mut Compiler;
     let compiler = &mut **compiler_ptr_ptr;
 
     let result = compiler.compile(PathBuf::from(input), data);
@@ -285,7 +285,7 @@ unsafe extern "C" fn compiler_compile(L: *mut lua_State) -> c_int {
 pub unsafe extern "C" fn luaopen_typst(L: *mut lua_State) -> c_int {
     create_value_metatable(L);
     // Create a new metatable in the Lua state for Compiler objects
-    luaL_newmetatable(L, CString::new("typst_Compiler").unwrap().as_ptr());
+    luaL_newmetatable(L, CString::new("TypstCompiler").unwrap().as_ptr());
 
     // Create a new table to hold Compiler methods
     lua_newtable(L);
