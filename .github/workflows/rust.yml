@@ -34,5 +34,5 @@ jobs:
     - name: Run Lua tests
       run: |
         cd tests
-        lua teste.lua
+        lua test.lua
 
