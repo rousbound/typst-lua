@@ -22,17 +22,19 @@ jobs:
         toolchain: 1.70.0
         override: true
     - name: Setup Lua
-      uses: leafo/gh-actions-lua@v8
+      with:
+        luaVersion: "5.3"
     - name: Build
       run: cargo build --verbose
     - name: Run Rust tests
       run: cargo test --verbose
     - name: Create Symbolic Link
-      run: ln -s $GITHUB_WORKSPACE/target/debug/libtypst.so $GITHUB_WORKSPACE/tests/typst.so
+      run: ln $GITHUB_WORKSPACE/target/debug/libtypst.so $GITHUB_WORKSPACE/tests/typst.so
     - name: Check symbolic link
-      run: ls -l $GITHUB_WORKSPACE/tests
+      run: ls $GITHUB_WORKSPACE/tests
     - name: Run Lua tests
       run: |
+        lua -v
         cd tests
         ls -l
         lua test.lua
