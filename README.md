@@ -29,18 +29,18 @@ local compiler = typst.compiler("templates")
 -- @return Option<Array> pdf bytes
 -- @return Option<String> error message
 local pdf_bytes, err = compiler:compile(
-	"helloworld.typ",
-	{
-		_DICT = typst.lua_table{world = "World!"},
-		_TEXT = typst.text"World!",
-		_JSON = typst.json(
-			[[
-				{
-					"world" : "World!"
-				}
-			]]
-		),
-	}
+    "helloworld.typ",
+    {
+        _DICT = typst.lua_table{world = "World!"},
+        _TEXT = typst.text"World!",
+        _JSON = typst.json(
+            [[
+                {
+                    "world" : "World!"
+                }
+            ]]
+        ),
+    }
 )
 ```
 
