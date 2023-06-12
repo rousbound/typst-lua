@@ -31,7 +31,11 @@ local compiler = typst.compiler("templates")
 local pdf_bytes, err = compiler:compile(
     "helloworld.typ",
     {
-        _DICT = typst.lua_table{world = "World!"},
+        _DICT = typst.lua_table(
+            {
+                world = "World!"
+            }
+        ),
         _TEXT = typst.text"World!",
         _JSON = typst.json(
             [[
