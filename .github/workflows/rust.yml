@@ -22,6 +22,7 @@ jobs:
         toolchain: 1.70.0
         override: true
     - name: Setup Lua
+    - uses: leafo/gh-actions-lua@v10
       with:
         luaVersion: "5.3"
     - name: Build
