@@ -146,6 +146,11 @@ unsafe fn lua_table_to_typst_value(L: *mut lua_State, mut index: c_int) -> Resul
                 let key = lua_to_rust_string_no_pop(L, -2);
                 map.insert(key.into(), value);
             },
+            LUA_TBOOLEAN => {
+                is_array = false;
+                let key = lua_toboolean(L, -1) != 0;
+                map.insert(key.to_string().into(), value);
+            },
             _ => {
                 lua_pop(L, 1);
                 return Err("Non-string or non-number key found");
@@ -204,67 +209,32 @@ unsafe extern "C" fn text (L: *mut lua_State) -> c_int {
     1
 }
 
-unsafe extern "C" fn compiler_compile_with(L: *mut lua_State) -> c_int {
-    // Grab the second argument from the Lua stack as raw C string
-    let input = lua_to_rust_string(L, 2);
-
-    let mut data = Vec::new();
-
-    lua_pushnil(L);
-    while lua_next(L, 3) != 0 {
-        let key = lua_to_rust_str_no_pop(L, -2);
-        let value_ptr_ptr = luaL_checkudata(L, -1, CString::new("TypstValue").unwrap().as_ptr()) as *mut *mut Value;
-        let value = &**value_ptr_ptr;
-        data.push((key, value.clone()));
-        lua_pop(L, 1);
-    }
-
-    let compiler_ptr_ptr = luaL_checkudata(L, 1, CString::new("TypstCompiler").unwrap().as_ptr()) as *mut *mut Compiler;
-    let compiler = &mut **compiler_ptr_ptr;
-
-    let result = compiler.compile_with(PathBuf::from(input), &data);
-
-    match result {
-        Ok(bytes) => {
-            lua_pushlstring(L, bytes.as_ptr() as *const i8, bytes.len() as size_t);
-            lua_pushnil(L);
-            2
-        }
-        Err(e) => {
-            let error_message = CString::new(e.to_string()).unwrap();
-            lua_pushnil(L);
-            lua_pushlstring(L, error_message.as_ptr(), error_message.to_bytes_with_nul().len() as size_t);
-            2
-        }
-    }
-}
-
-
-
-// Define a C-compatible function for the compile method
 unsafe extern "C" fn compiler_compile(L: *mut lua_State) -> c_int {
     // Grab the second argument from the Lua stack as raw C string
     let input = lua_to_rust_string(L, 2);
 
-    let mut data: Option<Value> = None;
-    // Check if the third argument is nil
-    if lua_isnil(L, 3) != 0 {
-    } else {
-        data = match lua_table_to_typst_value(L, 3) {
-            Ok(data) => Some(data),
-            Err(e) => {
-                let error_message = CString::new(e.to_string()).unwrap();
-                lua_pushnil(L);
-                lua_pushlstring(L, error_message.as_ptr(), error_message.to_bytes_with_nul().len() as size_t);
-                return 2;
-            },
-        };
+    let mut data: Option<Vec<(&str, Value)>> = None;
+
+    if lua_gettop(L) >= 3 { // Only if we have 3 or more arguments
+        lua_pushnil(L);
+        while lua_next(L, 3) != 0 {
+            let key = lua_to_rust_str_no_pop(L, -2);
+            let value_ptr_ptr = luaL_checkudata(L, -1, CString::new("TypstValue").unwrap().as_ptr()) as *mut *mut Value;
+            let value = &**value_ptr_ptr;
+            if data.is_none() {
+                data = Some(Vec::new());
+            }
+            if let Some(ref mut d) = data {
+                d.push((key, value.clone()));
+            }
+            lua_pop(L, 1);
+        }
     }
 
     let compiler_ptr_ptr = luaL_checkudata(L, 1, CString::new("TypstCompiler").unwrap().as_ptr()) as *mut *mut Compiler;
     let compiler = &mut **compiler_ptr_ptr;
 
-    let result = compiler.compile(PathBuf::from(input), data);
+    let result = compiler.compile(PathBuf::from(input), &data);
 
     match result {
         Ok(bytes) => {
@@ -274,11 +244,13 @@ unsafe extern "C" fn compiler_compile(L: *mut lua_State) -> c_int {
         }
         Err(e) => {
             let error_message = CString::new(e.to_string()).unwrap();
-            lua_pushlstring(L, error_message.as_ptr(), error_message.to_bytes_with_nul().len() as size_t);
+            lua_pushnil(L);
+            lua_pushlstring(L, error_message.as_ptr(), error_message.as_bytes_with_nul().len() as size_t);
             2
         }
     }
 }
+
 
 #[no_mangle]
 #[allow(clippy::missing_safety_doc)]
@@ -293,8 +265,6 @@ pub unsafe extern "C" fn luaopen_typst(L: *mut lua_State) -> c_int {
 
     // Push the compiler_compile function onto the stack
     lua_add_method(L, -2, "compile", compiler_compile); // Add the compile method to it
-
-    lua_add_method(L, -2, "compile_with", compiler_compile_with); // Add the compile method to it
 
     // Set the table as the __index metamethod for the Compiler metatable
     lua_setfield(L, -2, CString::new("__index").unwrap().as_ptr());

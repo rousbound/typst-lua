@@ -14,12 +14,9 @@ local join = function (t) return table.concat(t, "/") end
 
 local tests = {
 	compile = {
-		["test_simple_compile.typ"] = {"test_simple_compile.lua"},
-
+		["test.typ"] = {"test.lua"},
+		["test_blank.typ"] = {}
 	},
-	compile_with = {
-		["test_simple_compile_with.typ"] = {"test_simple_compile_with.lua"}
-	}
 }
 
 
@@ -45,7 +42,9 @@ local function test(template, files, method)
 			)
 			local path = join{data_dir, file}
 
-			local pdf_bytes, err = compiler[method](compiler, template, loadfile(path, "t", {typst = typst})())
+			local test_data = loadfile(path, "t", {typst = typst})()
+			assert(test_data, "Test data not found on path '"..path.."'")
+			local pdf_bytes, err = compiler:compile(template, test_data)
 
 			assert(pdf_bytes,
 				"Error generating pdf file of template '"..template.."': \n"
@@ -62,9 +61,35 @@ local function test(template, files, method)
 				pdf_bytes,
 				join{output_dir, template..variant..".pdf"}
 			)
-			print(green("OK").."\n")
+			print(green("OK"))
 		end
+	else
+		io.write(
+			"Template '"..blue(template).."' "
+		)
+		local path = join{data_dir, file}
+
+		local pdf_bytes, err = compiler:compile(template)
+
+		assert(pdf_bytes,
+			"Error generating pdf file of template '"..template.."': \n"
+			.."Typst error: "..tostring(err)
+		)
+
+		assert(
+			string.sub(pdf_bytes, 1, 5) == "%PDF-",
+			"File generating isn't a pdf '"..template.."'"
+		)
+
+		local variant = ( #files > 1 and ("-"..file) or "" )
+		write_pdf(
+			pdf_bytes,
+			join{output_dir, template..variant..".pdf"}
+		)
+		print(green("OK"))
+			
 	end
+
 end
 
 for method, tests in pairs(tests) do 
@@ -77,4 +102,5 @@ for method, tests in pairs(tests) do
 		test(key, tests[key], method)
 	end
 end
+print()
 print(green("All tests were successfull"))

@@ -208,10 +208,6 @@ fn get_diagnostics(
     Ok(output)
 }
 
-pub struct Compiler<'a> {
-    world: SystemWorld,
-    globals: Vec<(&'a str, Value)>
-}
 
 fn convert_json(value: serde_json::Value) -> Value {
     match value {
@@ -233,6 +229,11 @@ fn convert_json(value: serde_json::Value) -> Value {
     }
 }
 
+pub struct Compiler<'a> {
+    world: SystemWorld,
+    globals: Vec<(&'a str, Value)>
+}
+
 pub fn to_json(json_str: &str) -> Value {
     convert_json(serde_json::from_str(json_str).unwrap())
 }
@@ -250,64 +251,20 @@ impl<'a> Compiler<'a> {
 
     }
 
-    pub fn define(&mut self, label: &'a str, value: Value) {
-        self.globals.push((label, value))
-    }
-
-    pub fn compile_with(
-        &mut self,
-        input: PathBuf,
-        vars: &Vec<(&str, Value)>
-        ) -> StrResult<Vec<u8>> 
-    {
-
-        self.world.define(vars);
-        self.world.reset();
-        self.world.main = self.world.resolve(&self.world.root.join(&input))?;
-        let result = match typst::compile(&self.world) {
-            // Export the PDF.
-            Ok(document) => {
-                let buffer = typst::export::pdf(&document);
-                tracing::info!("Compilation succeeded");
-                Ok(buffer)
-            }
-
-            // Print diagnostics.
-            Err(errors) => {
-                tracing::info!("Compilation failed");
-                let diagnostic = get_diagnostics(&self.world, *errors).unwrap();
-                let temp_dir = tempfile::TempDir::new().unwrap();
-                
-                
-                // Get the path of the temporary directory
-                let tmp_path = temp_dir.into_path();
-                let log_file = format!("{}.log", tmp_path.join(input.file_stem().unwrap()).display());
-                let _ = fs::write(tmp_path.join(&log_file), &diagnostic);
-
-                for source in self.world.sources.iter() {
-                   let _ = fs::write(tmp_path.join(source.path().file_name().unwrap()), source.text()); 
-                }
-                tracing::info!("Compilation failed");
-                Err(EcoString::from(format!("Error compiling! Log written at: {}", log_file)))
-            }
-        };
-        self.world.reset_lib(&self.globals);
-        self.globals = vec!();
-        result
-    }
+    //pub fn define(&mut self, label: &'a str, value: Value) {
+        //self.globals.push((label, value))
+    //}
 
     pub fn compile(
         &mut self,
         input: PathBuf,
-        dict: Option<Value>
+        vars: &Option<Vec<(&str, Value)>>
         ) -> StrResult<Vec<u8>> 
     {
 
-        if let Some(dict) = dict {
-            //self.world.define(&self.globals);
-            self.globals.push(("_DICT", dict))
-        };
-        self.world.define(&self.globals);
+        if let Some(vars) = vars {
+            self.world.define(vars);
+        }
         self.world.reset();
         self.world.main = self.world.resolve(&self.world.root.join(&input))?;
         let result = match typst::compile(&self.world) {
@@ -322,19 +279,8 @@ impl<'a> Compiler<'a> {
             Err(errors) => {
                 tracing::info!("Compilation failed");
                 let diagnostic = get_diagnostics(&self.world, *errors).unwrap();
-                let temp_dir = tempfile::TempDir::new().unwrap();
-                
-                
-                // Get the path of the temporary directory
-                let tmp_path = temp_dir.into_path();
-                let log_file = format!("{}.log", tmp_path.join(input.file_stem().unwrap()).display());
-                let _ = fs::write(tmp_path.join(&log_file), &diagnostic);
-
-                for source in self.world.sources.iter() {
-                   let _ = fs::write(tmp_path.join(source.path().file_name().unwrap()), source.text()); 
-                }
                 tracing::info!("Compilation failed");
-                Err(EcoString::from(format!("Error compiling! Log written at: {}", log_file)))
+                Err(EcoString::from(format!("Error compiling!\n{}", diagnostic)))
             }
         };
         self.world.reset_lib(&self.globals);
