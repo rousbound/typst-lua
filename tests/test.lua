@@ -56,10 +56,10 @@ local function genpdf(template, file)
 		"File generating isn't a pdf '"..template.."'"
 	)
 
-	write_pdf(
-		pdf_bytes,
-		join{output_dir, template..".pdf"}
-	)
+	--write_pdf(
+		--pdf_bytes,
+		--join{output_dir, template..".pdf"}
+	--)
 	print(green("OK"))
 end
 
