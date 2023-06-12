@@ -215,7 +215,7 @@ unsafe extern "C" fn compiler_compile(L: *mut lua_State) -> c_int {
 
     let mut data: Option<Vec<(&str, Value)>> = None;
 
-    if lua_gettop(L) >= 3 { // Only if we have 3 or more arguments
+    if lua_isnil(L, 3) == 0 {
         lua_pushnil(L);
         while lua_next(L, 3) != 0 {
             let key = lua_to_rust_str_no_pop(L, -2);

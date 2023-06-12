@@ -32,62 +32,46 @@ end
 
 local compiler = typst.compiler("templates")
 
+local function genpdf(template, file) 
+	io.write(
+		"Template '"..blue(template).."' "..(file and " with '"..yellow(file).."': " or "")
+	)
+	local test_data
+	if file then 
+		local path
+		path = join{data_dir, file}
+		test_data = loadfile(path, "t", {typst = typst})()
+		assert(test_data, "Test data not found on path '"..path.."'")
+	end
+
+	local pdf_bytes, err = compiler:compile(template, test_data)
+
+	assert(pdf_bytes,
+		"Error generating pdf file of template '"..template.."': \n"
+		.."Typst error: "..tostring(err)
+	)
+
+	assert(
+		string.sub(pdf_bytes, 1, 5) == "%PDF-",
+		"File generating isn't a pdf '"..template.."'"
+	)
+
+	write_pdf(
+		pdf_bytes,
+		join{output_dir, template..".pdf"}
+	)
+	print(green("OK"))
+end
+
+
 local function test(template, files, method)
 	assert(files, "Test not defined")
 	if #files > 0 then 
 		for _, file in pairs(files) do
-			
-			io.write(
-				"Template '"..blue(template).."' with '"..yellow(file).."': "
-			)
-			local path = join{data_dir, file}
-
-			local test_data = loadfile(path, "t", {typst = typst})()
-			assert(test_data, "Test data not found on path '"..path.."'")
-			local pdf_bytes, err = compiler:compile(template, test_data)
-
-			assert(pdf_bytes,
-				"Error generating pdf file of template '"..template.."': \n"
-				.."Typst error: "..tostring(err)
-			)
-
-			assert(
-				string.sub(pdf_bytes, 1, 5) == "%PDF-",
-				"File generating isn't a pdf '"..template.."'"
-			)
-
-			local variant = ( #files > 1 and ("-"..file) or "" )
-			write_pdf(
-				pdf_bytes,
-				join{output_dir, template..variant..".pdf"}
-			)
-			print(green("OK"))
+			genpdf(template, file)
 		end
 	else
-		io.write(
-			"Template '"..blue(template).."' "
-		)
-		local path = join{data_dir, file}
-
-		local pdf_bytes, err = compiler:compile(template)
-
-		assert(pdf_bytes,
-			"Error generating pdf file of template '"..template.."': \n"
-			.."Typst error: "..tostring(err)
-		)
-
-		assert(
-			string.sub(pdf_bytes, 1, 5) == "%PDF-",
-			"File generating isn't a pdf '"..template.."'"
-		)
-
-		local variant = ( #files > 1 and ("-"..file) or "" )
-		write_pdf(
-			pdf_bytes,
-			join{output_dir, template..variant..".pdf"}
-		)
-		print(green("OK"))
-			
+		genpdf(template)
 	end
 
 end

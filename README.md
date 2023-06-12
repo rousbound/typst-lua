@@ -10,23 +10,25 @@ a new markup-based typesetting system that is powerful and easy to learn. Also h
 luarocks install typst-lua
 ```
 
-## Usage
+## Usage/Docs
 
 ```lua
 local typst = require"typst"
 
 -----------------------------------------------------
 -- Change root of module
--- @param Option<String> desired root path
+-- "compile()" will read templates relative to this path
+-- @param String desired root path
+-- @return TypstCompiler rust object as UserData in Lua
 local compiler = typst.compiler("templates")
 
 -----------------------------------------------------
 -- Compiles pdf with given template
 -- @param String template name
--- @param Option<HashMap<String, TypstValue>> data
+-- @param Option<Table<String, TypstValue>> data
 -- @return Option<Array> pdf bytes
 -- @return Option<String> error message
-local pdf_bytes, err = compiler:compile_with(
+local pdf_bytes, err = compiler:compile(
 	"helloworld.typ",
 	{
 		_DICT = typst.lua_table{world = "World!"},
