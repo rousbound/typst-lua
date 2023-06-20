@@ -25,25 +25,15 @@ local compiler = typst.compiler("templates")
 -----------------------------------------------------
 -- Compiles pdf with given template
 -- @param String template name
--- @param Option<Table<String, TypstValue>> data
--- @return Option<Array> pdf bytes
+-- @param Option<Table<String, TypstValue>> 
+-- @return Option<String> pdf bytes
 -- @return Option<String> error message
 local pdf_bytes, err = compiler:compile(
     "helloworld.typ",
     {
-        _DICT = typst.lua_table(
-            {
-                world = "World!"
-            }
-        ),
-        _TEXT = typst.text"World!",
-        _JSON = typst.json(
-            [[
-                {
-                    "world" : "World!"
-                }
-            ]]
-        ),
+        _DICT = typst.from_table { world = "World!" },
+        _TEXT = typst.from_text"World!",
+        _JSON = typst.from_json[[ { "world" : "World!" } ]],
     }
 )
 ```
