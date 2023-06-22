@@ -8,8 +8,9 @@ use std::{
 
 use lua_sys::*;
 use typst_compiler::{Compiler};
-use libc::{size_t};
-use typst::eval::{Value, Dict, Array};
+use libc::{size_t, c_void};
+use typst::eval::{Value, Dict, Array, Dynamic};
+use std::mem;
 
 
 
@@ -69,6 +70,19 @@ unsafe fn lua_table_to_typst_value(L: *mut lua_State, mut index: c_int) -> Resul
                 let boolean = lua_toboolean(L, -1) != 0;
                 Ok(Value::Bool(boolean))
             },
+            LUA_TUSERDATA => {
+                let raw_ptr = lua_touserdata(L, -1) as *mut Value;
+                if raw_ptr.is_null() {
+                    panic!("Received null pointer from Lua");
+                    Err("Received null pointer from Lua")
+                } else {
+                    let value = unsafe {
+                        // dereference the pointer to get the Value object
+                        (*raw_ptr).clone() 
+                    };
+                    Ok(value)
+                }
+            },
             _ => Err("Type not expected, table should contain only string, number, table or boolean values")
         }?;
         // Check the key type
@@ -113,40 +127,8 @@ unsafe fn lua_table_to_typst_value(L: *mut lua_State, mut index: c_int) -> Resul
 unsafe extern "C" fn table (L: *mut lua_State) -> c_int {
     let value = Box::new(lua_table_to_typst_value(L, 1).unwrap());
     let value_ptr = Box::into_raw(value);
-
-    let userdata = lua_newuserdata(L, std::mem::size_of::<*mut Value>() as size_t) as *mut *mut Value;
-    std::ptr::write(userdata, value_ptr);
-
-    luaL_getmetatable(L, CString::new("TypstValue").unwrap().as_ptr());
-    lua_setmetatable(L, -2);
-
-    1
-}
-unsafe extern "C" fn json (L: *mut lua_State) -> c_int {
-    let input = lua_to_rust_string(L, 1);
-
-    let value = Box::new(typst_compiler::to_json(&input));
-    // Transform the boxed compiler into a raw pointer for FFI
-    let value_ptr = Box::into_raw(value);
-
-    let userdata = lua_newuserdata(L, std::mem::size_of::<*mut Value>() as size_t) as *mut *mut Value;
-    std::ptr::write(userdata, value_ptr);
-
-    luaL_getmetatable(L, CString::new("TypstValue").unwrap().as_ptr());
-    lua_setmetatable(L, -2);
-
-    1
-}
-
-unsafe extern "C" fn text (L: *mut lua_State) -> c_int {
-
-    let input = lua_to_rust_string(L, 1);
-    let value = Box::new(typst_compiler::to_text(&input));
-    let value_ptr = Box::into_raw(value);
-
-    let userdata = lua_newuserdata(L, std::mem::size_of::<*mut Value>() as size_t) as *mut *mut Value;
-    std::ptr::write(userdata, value_ptr);
-
+    let userdata = lua_newuserdata(L, std::mem::size_of::<Value>() as size_t) as *mut Value;
+    std::ptr::write(userdata, *Box::from_raw(value_ptr)); // Move the Value out of the Box and write it to userdata
     luaL_getmetatable(L, CString::new("TypstValue").unwrap().as_ptr());
     lua_setmetatable(L, -2);
 
@@ -168,36 +150,31 @@ unsafe fn create_value_metatable(L: *mut lua_State) {
 }
 
 unsafe extern "C" fn value_delete(L: *mut lua_State) -> c_int {
-    let value_ptr_ptr = luaL_checkudata(L, 1, CString::new("TypstValue").unwrap().as_ptr()) as *mut *mut Value;
-    drop(Box::from_raw(*value_ptr_ptr));
+    let value_ptr = luaL_checkudata(L, 1, CString::new("TypstValue").unwrap().as_ptr()) as *mut Value;
+    std::ptr::drop_in_place(value_ptr);  // Deallocate the Value object
     0
 }
 
-unsafe extern "C" fn compiler_compile(L: *mut lua_State) -> c_int {
+unsafe extern "C" fn compile(L: *mut lua_State) -> c_int {
+    let mut compiler = Compiler::new(PathBuf::from("."));
     // Grab the second argument from the Lua stack as raw C string
-    let input = lua_to_rust_string(L, 2);
+    let input = lua_to_rust_string(L, 1);
 
-    let mut data: Option<Vec<(&str, Value)>> = None;
+    let mut data: Option<Value> = None;
 
-    if lua_isnil(L, 3) == 0 {
-        lua_pushnil(L);
-        while lua_next(L, 3) != 0 {
-            let key = lua_to_rust_str_no_pop(L, -2);
-            let value_ptr_ptr = luaL_checkudata(L, -1, CString::new("TypstValue").unwrap().as_ptr()) as *mut *mut Value;
-            let value = &**value_ptr_ptr;
-            if data.is_none() {
-                data = Some(Vec::new());
+    if lua_isnil(L, 2) == 0 {
+        let result = lua_table_to_typst_value(L, 2);
+
+        data = match result {
+            Ok(result) => Some(result),
+            Err(e) => {
+                let error_message = CString::new(e.to_string()).unwrap();
+                lua_pushnil(L);
+                lua_pushlstring(L, error_message.as_ptr(), error_message.as_bytes_with_nul().len() as size_t);
+                return 2
             }
-            if let Some(ref mut d) = data {
-                d.push((key, value.clone()));
-            }
-            lua_pop(L, 1);
         }
     }
-
-    let compiler_ptr_ptr = luaL_checkudata(L, 1, CString::new("TypstCompiler").unwrap().as_ptr()) as *mut *mut Compiler;
-    let compiler = &mut **compiler_ptr_ptr;
-
     let result = compiler.compile(PathBuf::from(input), &data);
 
     match result {
@@ -215,71 +192,40 @@ unsafe extern "C" fn compiler_compile(L: *mut lua_State) -> c_int {
     }
 }
 
-// Define a C-compatible function to create a new Compiler instance
-unsafe extern "C" fn compiler_new(L: *mut lua_State) -> c_int {
-    // Create a new scope to keep variable lifetime under control
-    let root = lua_to_rust_string(L, 1);
 
-    // Create a new Compiler object with root path
-    let compiler = Box::new(Compiler::new(PathBuf::from(root)));
+unsafe extern "C" fn json (L: *mut lua_State) -> c_int {
+    let input = lua_to_rust_string(L, 1);
+
+    let value = Box::new(typst_compiler::to_json(&input));
     // Transform the boxed compiler into a raw pointer for FFI
-    let compiler_ptr = Box::into_raw(compiler);
+    let value_ptr = Box::into_raw(value);
 
-    // Allocate memory in the Lua VM for userdata (the raw Compiler pointer)
-    let userdata = lua_newuserdata(L, std::mem::size_of::<*mut Compiler>() as size_t);
-    // Write the raw compiler pointer to the newly allocated userdata
-    std::ptr::write(userdata as *mut *mut Compiler, compiler_ptr);
+    // Here, we should use the size of Value instead of the size of a pointer to Value
+    let userdata = lua_newuserdata(L, std::mem::size_of::<Value>() as size_t) as *mut Value;
 
-    // Get the metatable for the Compiler type
-    luaL_getmetatable(L, CString::new("TypstCompiler").unwrap().as_ptr());
-    // Set the metatable for the userdata
+    // Move the Value out of the Box and write it to userdata
+    std::ptr::write(userdata, *Box::from_raw(value_ptr));
+
+    luaL_getmetatable(L, CString::new("TypstValue").unwrap().as_ptr());
     lua_setmetatable(L, -2);
 
-    // Return 1 to Lua, indicating that we've left one return value on the stack
     1
 }
-
-unsafe extern "C" fn compiler_delete(L: *mut lua_State) -> c_int {
-    // Get the raw Compiler pointer from the first argument (the userdata)
-    let compiler_ptr_ptr = luaL_checkudata(L, 1, CString::new("TypstCompiler").unwrap().as_ptr()) as *mut *mut Compiler;
-    // Dereference the pointer and drop the Box, deallocating the Compiler
-    drop(Box::from_raw(*compiler_ptr_ptr));
-    // Return 0 to Lua, as we don't push anything onto the stack
-    0
-}
-
 
 #[no_mangle]
 #[allow(clippy::missing_safety_doc)]
 // Define a C-compatible function to be called when the library is loaded
 pub unsafe extern "C" fn luaopen_typst(L: *mut lua_State) -> c_int {
     create_value_metatable(L);
-    // Create a new metatable in the Lua state for Compiler objects
-    luaL_newmetatable(L, CString::new("TypstCompiler").unwrap().as_ptr());
-
-    // Create a new table to hold Compiler methods
-    lua_newtable(L);
-
-    // Push the compiler_compile function onto the stack
-    lua_add_method(L, -2, "compile", compiler_compile); // Add the compile method to it
-
-    // Set the table as the __index metamethod for the Compiler metatable
-    lua_setfield(L, -2, CString::new("__index").unwrap().as_ptr());
-
-
-    lua_add_method(L, -2, "__gc", compiler_delete); // Add the __gc method directly to the metatable
-
-    // Remove the metatable from the stack
-    lua_pop(L, 1);
 
     // Create a new table to hold the library's functions
     lua_newtable(L);
 
-    lua_add_method(L, -2, "compiler", compiler_new); // Add the __gc method directly to the metatable
+    lua_add_method(L, -2, "compile", compile); // Add the __gc method directly to the metatable
 
     lua_add_method(L, -2, "from_table", table);
 
-    lua_add_method(L, -2, "from_text", text);
+    //lua_add_method(L, -2, "from_text", text);
 
     lua_add_method(L, -2, "from_json", json);
 

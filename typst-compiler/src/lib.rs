@@ -55,13 +55,11 @@ impl SystemWorld {
         }
     }
 
-    fn define(&mut self, vars: &Vec<(&str, Value)>) {
+    fn define(&mut self, label: &str, var: &Value) {
         self.library.as_mut().unwrap().update(|l|
-            for var in vars {
-                l.global
-                    .scope_mut()
-                    .define_captured(var.0, var.1.to_owned())
-            }
+            l.global
+                .scope_mut()
+                .define_captured(label, var.to_owned())
         );
     }
 
@@ -258,12 +256,12 @@ impl<'a> Compiler<'a> {
     pub fn compile(
         &mut self,
         input: PathBuf,
-        vars: &Option<Vec<(&str, Value)>>
+        var: &Option<Value>
         ) -> StrResult<Vec<u8>> 
     {
 
-        if let Some(vars) = vars {
-            self.world.define(vars);
+        if let Some(var) = var {
+            self.world.define("_DATA", var);
         }
         self.world.reset();
         self.world.main = self.world.resolve(&self.world.root.join(&input))?;
