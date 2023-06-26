@@ -16,24 +16,16 @@ luarocks install typst-lua
 local typst = require"typst"
 
 -----------------------------------------------------
--- Change root of module
--- "compile()" will read templates relative to this path
--- @param String desired root path
--- @return TypstCompiler rust object as UserData in Lua
-local compiler = typst.compiler("templates")
-
------------------------------------------------------
 -- Compiles pdf with given template
 -- @param String template name
 -- @param Option<Table<String, TypstValue>> 
 -- @return Option<String> pdf bytes
 -- @return Option<String> error message
-local pdf_bytes, err = compiler:compile(
+local pdf_bytes, err = typst.compile(
     "helloworld.typ",
     {
-        _DICT = typst.from_table { world = "World!" },
-        _TEXT = typst.from_text"World!",
-        _JSON = typst.from_json[[ { "world" : "World!" } ]],
+       world = "World!",
+       json = typst.from_json[[ { "world" : "World!" } ]],
     }
 )
 ```
@@ -42,9 +34,8 @@ local pdf_bytes, err = compiler:compile(
 
 Example with the lua code above in the following "helloworld.typ" file:
 ```typst
-Hello #_DICT.world
-Hello #_JSON.world
-Hello #_TEXT
+Hello #_LUADATA.world
+Hello #_LUADATA.json.world
 
 ```
 
@@ -53,10 +44,7 @@ Output in pdf will be:
 ```
 Hello World!
 Hello World!
-Hello World!
 ```
-
-
 
 
 

@@ -249,10 +249,6 @@ impl<'a> Compiler<'a> {
 
     }
 
-    //pub fn define(&mut self, label: &'a str, value: Value) {
-        //self.globals.push((label, value))
-    //}
-
     pub fn compile(
         &mut self,
         input: PathBuf,
@@ -261,7 +257,7 @@ impl<'a> Compiler<'a> {
     {
 
         if let Some(var) = var {
-            self.world.define("_DATA", var);
+            self.world.define("_LUADATA", var);
         }
         self.world.reset();
         self.world.main = self.world.resolve(&self.world.root.join(&input))?;

@@ -8,9 +8,9 @@ use std::{
 
 use lua_sys::*;
 use typst_compiler::{Compiler};
-use libc::{size_t, c_void};
-use typst::eval::{Value, Dict, Array, Dynamic};
-use std::mem;
+use libc::{size_t};
+use typst::eval::{Value, Dict, Array};
+
 
 
 
