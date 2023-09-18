@@ -2,32 +2,38 @@ use std::cell::{RefCell, RefMut};
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::hash::Hash;
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
+use std::process;
+use std::error;
 
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use codespan_reporting::term::{self, termcolor};
 use comemo::Prehashed;
 use elsa::FrozenVec;
 use memmap2::Mmap;
+use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use once_cell::unsync::OnceCell;
-use same_file::{Handle};
+use same_file::{is_same_file, Handle};
 use siphasher::sip128::{Hasher128, SipHasher13};
+use termcolor::{ColorChoice, StandardStream, WriteColor};
 use typst::diag::{FileError, FileResult, SourceError, StrResult};
-use typst::eval::{Library, Value};
-use typst::font::{Font, FontBook, FontInfo};
+use typst::eval::{Library,Value};
+use typst::font::{Font, FontBook, FontInfo, FontVariant};
 use typst::syntax::{Source, SourceId};
 use typst::util::{Buffer, PathExt};
-use typst_library::prelude::*;
 use typst::World;
 use walkdir::WalkDir;
+use tempfile;
 
 use typst_library::prelude::EcoString;
 
+use serde_json::{json};
 
 /// A world that provides access to the operating system.
 struct SystemWorld {
     root: PathBuf,
-    library: Option<Prehashed<Library>>,
+    library: Prehashed<Library>,
     book: Prehashed<FontBook>,
     fonts: Vec<FontSlot>,
     hashes: RefCell<HashMap<PathBuf, FileResult<PathHash>>>,
@@ -36,16 +42,37 @@ struct SystemWorld {
     main: SourceId,
 }
 
+/// Convert a JSON value to a Typst value.
+pub fn convert_json(value: serde_json::Value) -> Value {
+    match value {
+        serde_json::Value::Null => Value::None,
+        serde_json::Value::Bool(v) => Value::Bool(v),
+        serde_json::Value::Number(v) => match v.as_i64() {
+            Some(int) => Value::Int(int),
+            None => Value::Float(v.as_f64().unwrap_or(f64::NAN)),
+        },
+        serde_json::Value::String(v) => Value::Str(v.into()),
+        serde_json::Value::Array(v) => {
+            Value::Array(v.into_iter().map(convert_json).collect())
+        }
+        serde_json::Value::Object(v) => Value::Dict(
+            v.into_iter()
+                .map(|(key, value)| (key.into(), convert_json(value)))
+                .collect(),
+        ),
+    }
+}
+
 impl SystemWorld {
     fn new(root: PathBuf, font_paths: &[PathBuf]) -> Self {
         let mut searcher = FontSearcher::new();
         searcher.search(font_paths);
 
-        let library = typst_library::build();
+        let mut library = typst_library::build();
 
         Self {
             root,
-            library: Some(Prehashed::new(library)),
+            library: Prehashed::new(library),
             book: Prehashed::new(searcher.book),
             fonts: searcher.fonts,
             hashes: RefCell::default(),
@@ -55,23 +82,10 @@ impl SystemWorld {
         }
     }
 
-    fn define(&mut self, label: &str, var: &Value) {
-        self.library.as_mut().unwrap().update(|l|
-            l.global
-                .scope_mut()
-                .define_captured(label, var.to_owned())
-        );
-    }
-
-    fn reset_lib(&mut self, vars: &Vec<(&str, Value)>) {
-        self.library.as_mut().unwrap().update(|l|
-            for var in vars {
-                l.global
-                    .scope_mut()
-                    .define_captured(var.0, Value::None)
-            }
-        );
-        
+    fn declare_global_value(&mut self, label: &str, value:Value) {
+        let mut library = typst_library::build();
+        library.global.scope_mut().define(label, value);
+        self.library = Prehashed::new(library);
     }
 }
 
@@ -86,7 +100,7 @@ impl World for SystemWorld {
     }
 
     fn library(&self) -> &Prehashed<Library> {
-        self.library.as_ref().unwrap()
+        &self.library
     }
 
     fn main(&self) -> &Source {
@@ -106,7 +120,7 @@ impl World for SystemWorld {
     }
 
     fn source(&self, id: SourceId) -> &Source {
-        &self.sources[id.as_u16() as usize]
+        &self.sources[id.into_u16() as usize]
     }
 
     fn book(&self) -> &Prehashed<FontBook> {
@@ -160,6 +174,31 @@ impl SystemWorld {
         id
     }
 
+    fn relevant(&mut self, event: &notify::Event) -> bool {
+        match &event.kind {
+            notify::EventKind::Any => {}
+            notify::EventKind::Access(_) => return false,
+            notify::EventKind::Create(_) => return true,
+            notify::EventKind::Modify(kind) => match kind {
+                notify::event::ModifyKind::Any => {}
+                notify::event::ModifyKind::Data(_) => {}
+                notify::event::ModifyKind::Metadata(_) => return false,
+                notify::event::ModifyKind::Name(_) => return true,
+                notify::event::ModifyKind::Other => return false,
+            },
+            notify::EventKind::Remove(_) => {}
+            notify::EventKind::Other => return false,
+        }
+
+        event.paths.iter().any(|path| self.dependant(path))
+    }
+
+    fn dependant(&self, path: &Path) -> bool {
+        self.hashes.borrow().contains_key(&path.normalize())
+            || PathHash::new(path)
+                .map_or(false, |hash| self.paths.borrow().contains_key(&hash))
+    }
+
     #[tracing::instrument(skip_all)]
     fn reset(&mut self) {
         self.sources.as_mut().clear();
@@ -206,62 +245,32 @@ fn get_diagnostics(
     Ok(output)
 }
 
-
-fn convert_json(value: serde_json::Value) -> Value {
-    match value {
-        serde_json::Value::Null => Value::None,
-        serde_json::Value::Bool(v) => v.into_value(),
-        serde_json::Value::Number(v) => match v.as_i64() {
-            Some(int) => int.into_value(),
-            None => v.as_f64().unwrap_or(f64::NAN).into_value(),
-        },
-        serde_json::Value::String(v) => v.into_value(),
-        serde_json::Value::Array(v) => {
-            v.into_iter().map(convert_json).collect::<Array>().into_value()
-        }
-        serde_json::Value::Object(v) => v
-            .into_iter()
-            .map(|(key, value)| (key.into(), convert_json(value)))
-            .collect::<Dict>()
-            .into_value(),
-    }
-}
-
-pub struct Compiler<'a> {
+pub struct Compiler {
     world: SystemWorld,
-    globals: Vec<(&'a str, Value)>
 }
 
-pub fn to_json(json_str: &str) -> Value {
-    convert_json(serde_json::from_str(json_str).unwrap())
-}
+impl Compiler {
 
-pub fn to_text(text: &str) -> Value {
-   Value::Str(Str::from(text)) 
-}
-
-impl<'a> Compiler<'a> {
-
-    pub fn new(root: PathBuf) -> Compiler<'a> {
+    pub fn new(root: PathBuf) -> Compiler {
         
-        let world = SystemWorld::new(root, &[PathBuf::new()]);
-        Compiler{world, globals: vec!()}
+        let world = SystemWorld::new(root, &vec![PathBuf::new()]);
+        Compiler{world: world}
 
     }
 
     pub fn compile(
         &mut self,
         input: PathBuf,
-        var: &Option<Value>
+        json: Option<serde_json::Value>
         ) -> StrResult<Vec<u8>> 
     {
 
-        if let Some(var) = var {
-            self.world.define("_LUADATA", var);
-        }
+        if let Some(json) = json {
+            self.world.declare_global_value("_JSON", convert_json(json));
+        };
         self.world.reset();
-        self.world.main = self.world.resolve(&self.world.root.join(&input))?;
-        let result = match typst::compile(&self.world) {
+        self.world.main = self.world.resolve(&self.world.root.join(&input)).map_err(|e| e )?;
+        match typst::compile(&self.world) {
             // Export the PDF.
             Ok(document) => {
                 let buffer = typst::export::pdf(&document);
@@ -273,15 +282,26 @@ impl<'a> Compiler<'a> {
             Err(errors) => {
                 tracing::info!("Compilation failed");
                 let diagnostic = get_diagnostics(&self.world, *errors).unwrap();
+                let temp_dir = tempfile::TempDir::new().unwrap();
+                
+                
+                // Get the path of the temporary directory
+                let tmp_path = temp_dir.into_path();
+                let log_file = format!("{}.log", tmp_path.join(input.file_stem().unwrap()).display());
+                let _ = fs::write(tmp_path.join(&log_file), &diagnostic);
+
+                for source in self.world.sources.iter() {
+                   let _ = fs::write(tmp_path.join(&source.path().file_name().unwrap()), &source.text()); 
+                }
                 tracing::info!("Compilation failed");
-                Err(EcoString::from(format!("Error compiling!\n{}", diagnostic)))
+                Err(EcoString::from(format!("Error compiling! Log written at: {}", log_file)))
             }
-        };
-        self.world.reset_lib(&self.globals);
-        self.globals = vec!();
-        result
+        }
+
     }
 }
+
+
 
 #[derive(Debug, Clone)]
 pub struct FontsCommand {
@@ -291,6 +311,41 @@ pub struct FontsCommand {
 
 type CodespanResult<T> = Result<T, CodespanError>;
 type CodespanError = codespan_reporting::files::Error;
+
+
+struct FontsSettings {
+    /// The font paths
+    font_paths: Vec<PathBuf>,
+
+    /// Whether to include font variants
+    variants: bool,
+}
+
+impl FontsSettings {
+    /// Create font settings from the field values.
+    pub fn new(font_paths: Vec<PathBuf>, variants: bool) -> Self {
+        Self { font_paths, variants }
+    }
+}
+
+
+/// Execute a font listing command.
+fn fonts(command: FontsSettings) -> StrResult<()> {
+    let mut searcher = FontSearcher::new();
+    searcher.search(&command.font_paths);
+
+    for (name, infos) in searcher.book.families() {
+        println!("{name}");
+        if command.variants {
+            for info in infos {
+                let FontVariant { style, weight, stretch } = info.variant;
+                println!("- Style: {style:?}, Weight: {weight:?}, Stretch: {stretch:?}");
+            }
+        }
+    }
+
+    Ok(())
+}
 
 
 /// Holds details about the location of a font and lazily the font itself.
