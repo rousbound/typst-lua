@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Library interface for typst."
 categories = ["compilers", "command-line-utilities"]
 keywords = ["typst", "cli"]
-edition = "2018"  # or "2018" for Rust 2018
+edition = "2021"  # or "2018" for Rust 2018
 
 [lib]
 name = "typst_compiler"
@@ -37,6 +37,7 @@ tracing-error = "0.2"
 tracing-flame = "0.2.0"
 tracing-subscriber = "0.3.17"
 walkdir = "2"
+ecow = "0.1.2"
 
 [build-dependencies]
 #comemo = { git = "https://github.com/typst/comemo" }
@@ -50,3 +51,14 @@ default = ["embed-fonts"]
 # - For math: New Computer Modern Math
 # - For code: Deja Vu Sans Mono
 embed-fonts = []
+
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
+
+[profile.test]
+lto = "thin"
+codegen-units = 1
+strip = true

@@ -2,7 +2,7 @@
 name = "typst-lua"
 version = "0.1.0"
 authors = ["geraldoluiz@puc-rio.br"]
-edition = "2018"
+edition = "2021"
 
 # Add this line
 [lib]
@@ -13,13 +13,19 @@ crate-type = ["cdylib"]
 typst-compiler = { path = "typst-compiler" }
 typst = { git = "https://github.com/typst/typst", package = "typst"}
 libc = "0.2"
-serde_json = "1.0"
-lua-sys = "0.2.0"
+
+rlua_lua54 = { git = "https://github.com/amethyst/rlua", package = "rlua-lua54-sys", optional = true }
+rlua_lua53 = { git = "https://github.com/amethyst/rlua", package = "rlua-lua53-sys", optional = true }
+
+[features]
+lua54 = ["rlua_lua54"]
+lua53 = ["rlua_lua53"]
 
 [profile.release]
-opt-level = 3
-#lto = true
-#codegen-units = 1
+opt-level = 2
+lto = "thin"
+codegen-units = 1
+strip = true
 #panic = 'abort'
 
 [profile.dev]

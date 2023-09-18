@@ -17,15 +17,14 @@ local typst = require"typst"
 
 -----------------------------------------------------
 -- Compiles pdf with given template
--- @param String template name
--- @param Option<Table<String, TypstValue>> 
--- @return Option<String> pdf bytes
--- @return Option<String> error message
+-- @param string template name
+-- @param table|nil data 
+-- @return string|nil pdf bytes
+-- @return string|nil error message
 local pdf_bytes, err = typst.compile(
     "helloworld.typ",
     {
        world = "World!",
-       json = typst.from_json[[ { "world" : "World!" } ]],
     }
 )
 ```
@@ -35,7 +34,6 @@ local pdf_bytes, err = typst.compile(
 Example with the lua code above in the following "helloworld.typ" file:
 ```typst
 Hello #_LUADATA.world
-Hello #_LUADATA.json.world
 
 ```
 
@@ -43,6 +41,27 @@ Output in pdf will be:
 
 ```
 Hello World!
+```
+
+
+### Other use cases
+You can also convert json from string directly to a TypstValue like:
+
+```lua
+local pdf_bytes, err = typst.compile(
+    "helloworld.typ",
+    typst.from_json[[ { "world" : "World!" } ]],
+)
+```
+
+```typst
+Hello #_LUADATA.json.world
+
+```
+
+Output in pdf will be:
+
+```
 Hello World!
 ```
 
