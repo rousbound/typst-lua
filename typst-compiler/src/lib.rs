@@ -1,31 +1,15 @@
-use std::cell::{RefCell, RefMut};
-use std::collections::HashMap;
-use std::fs::{self, File};
-use std::hash::Hash;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 
 mod world;
 mod fonts;
 mod package;
 
-use codespan_reporting::diagnostic::{Diagnostic, Label};
-use codespan_reporting::term::{self, termcolor};
-use comemo::Prehashed;
-use elsa::FrozenVec;
-use memmap2::Mmap;
-use once_cell::unsync::OnceCell;
-use same_file::{Handle};
-use siphasher::sip128::{Hasher128, SipHasher13};
-use typst::diag::{FileError, FileResult, StrResult};
-use typst::eval::{Library, Value};
-use typst::font::{Font, FontBook, FontInfo};
-use typst::syntax::{Source};
+use typst::diag::StrResult;
+use typst::eval::{Value};
 use typst_library::prelude::*;
 use typst::World;
-use walkdir::WalkDir;
 
-use typst_library::prelude::EcoString;
 use crate::world::SystemWorld;
 use typst::eval::Tracer;
 

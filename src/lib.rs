@@ -3,7 +3,6 @@
 use std::{
     ffi::{CStr, CString},
     os::raw::c_int,
-    path::PathBuf,
 };
 
 #[cfg(feature = "lua54")]
@@ -13,7 +12,7 @@ extern crate rlua_lua54 as rlua;
 extern crate rlua_lua53 as rlua;
 use rlua::*;
 use typst_compiler::{compile as typst_compile};
-use libc::{size_t, printf};
+use libc::{size_t};
 use typst::eval::{Value, Dict, Array};
 
 
@@ -117,7 +116,6 @@ unsafe fn lua_table_to_typst_value(L: *mut lua_State, mut index: c_int) -> Resul
             LUA_TUSERDATA => {
                 let raw_ptr = lua_touserdata(L, -1) as *mut Value;
                 if raw_ptr.is_null() {
-                    panic!("Received null pointer from Lua");
                     Err("Received null pointer from Lua")
                 } else {
                     let value = unsafe {

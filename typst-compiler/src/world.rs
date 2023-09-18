@@ -20,8 +20,6 @@ use crate::package::prepare_package;
 
 /// A world that provides access to the operating system.
 pub struct SystemWorld {
-    /// The working directory.
-    workdir: Option<PathBuf>,
     /// The root relative to which absolute paths are resolved.
     root: PathBuf,
     /// The input path.
@@ -71,7 +69,6 @@ impl SystemWorld {
             .ok_or("input file must be contained in project root")?;
 
         Ok(Self {
-            workdir: std::env::current_dir().ok(),
             root,
             main: FileId::new(None, main_path),
             library: Prehashed::new(typst_library::build()),
@@ -88,32 +85,14 @@ impl SystemWorld {
         self.main
     }
 
-    /// The root relative to which absolute paths are resolved.
-    pub fn root(&self) -> &Path {
-        &self.root
-    }
 
-    /// The current working directory.
-    pub fn workdir(&self) -> &Path {
-        self.workdir.as_deref().unwrap_or(Path::new("."))
-    }
 
-    /// Return all paths the last compilation depended on.
-    pub fn dependencies(&mut self) -> impl Iterator<Item = &Path> {
-        self.paths.get_mut().values().map(|slot| slot.system_path.as_path())
-    }
 
     /// Reset the compilation state in preparation of a new compilation.
     pub fn reset(&mut self) {
         self.hashes.borrow_mut().clear();
         self.paths.borrow_mut().clear();
         self.now.take();
-    }
-
-    /// Lookup a source file by id.
-    #[track_caller]
-    pub fn lookup(&self, id: FileId) -> Source {
-        self.source(id).expect("file id does not point to any source file")
     }
 }
 
