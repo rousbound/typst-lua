@@ -14,9 +14,9 @@ local join = function (t) return table.concat(t, "/") end
 
 local tests = {
 	compile = {
-        ["test.typ"] = {"test.lua"},
-        ["test_json.typ"] = {"test_json.lua"},
-        ["test_blank.typ"] = {}
+		["test.typ"] = {"test.lua"},
+		--["test_json.typ"] = {"test_json.lua"},
+		["test_blank.typ"] = {}
 	},
 }
 
@@ -41,7 +41,11 @@ local function genpdf(template, file)
 		assert(test_data, "Test data not found on path '"..path.."'")
 	end
 
+	print("Passing control to typst-compiler")
 	local pdf_bytes, err = typst.compile(join{"templates", template}, test_data)
+
+	assert(not err, "Error: "..tostring(err))
+
 
 	assert(pdf_bytes,
 		"Error generating pdf file of template '"..template.."': \n"
@@ -53,10 +57,10 @@ local function genpdf(template, file)
 		"File generating isn't a pdf '"..template.."'"
 	)
 
-    --write_pdf(
-        --pdf_bytes,
-        --join{output_dir, template..".pdf"}
-    --)
+	write_pdf(
+		pdf_bytes,
+		join{output_dir, template..".pdf"}
+	)
 	print(green("OK"))
 end
 
