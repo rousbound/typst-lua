@@ -16,11 +16,11 @@ luarocks install typst-lua
 local typst = require"typst"
 
 -----------------------------------------------------
--- Compiles pdf with given template
--- @param string template name
--- @param table|nil data 
--- @return string|nil pdf bytes
--- @return string|nil error message
+--- Compiles pdf with given template and optional data
+--- @param string template name
+--- @param table|nil data 
+--- @return string|nil pdf bytes
+--- @return string|nil error message
 local pdf_bytes, err = typst.compile(
     "helloworld.typ",
     {
@@ -42,30 +42,6 @@ Output in pdf will be:
 ```
 Hello World!
 ```
-
-
-### Other use cases
-You can also convert json from string directly to a TypstValue like:
-
-```lua
-local pdf_bytes, err = typst.compile(
-    "helloworld.typ",
-    typst.from_json[[ { "world" : "World!" } ]],
-)
-```
-
-```typst
-Hello #_LUADATA.json.world
-
-```
-
-Output in pdf will be:
-
-```
-Hello World!
-```
-
-
 
 ## License
 
