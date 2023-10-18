@@ -8,26 +8,6 @@ use typst::eval::Bytes;
 use typst::font::{Font, FontBook, FontInfo};
 use walkdir::WalkDir;
 
-//use crate::args::FontsCommand;
-
-/// Execute a font listing command.
-//pub fn fonts(command: &FontsCommand) -> StrResult<()> {
-    //let mut searcher = FontSearcher::new();
-    //searcher.search(&command.font_paths);
-
-    //for (name, infos) in searcher.book.families() {
-        //println!("{name}");
-        //if command.variants {
-            //for info in infos {
-                //let FontVariant { style, weight, stretch } = info.variant;
-                //println!("- Style: {style:?}, Weight: {weight:?}, Stretch: {stretch:?}");
-            //}
-        //}
-    //}
-
-    //Ok(())
-//}
-
 /// Searches for fonts.
 pub struct FontSearcher {
     /// Metadata about all discovered fonts.

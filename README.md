@@ -2,7 +2,7 @@
 
 
 Lua binding to [typst](https://github.com/typst/typst),
-a new markup-based typesetting system that is powerful and easy to learn. Also has functions that enables lua to pass values directly to typst.
+a new markup-based typesetting system that is powerful and easy to learn. Also has enables lua to pass certain values directly to typst.
 
 ## Installation
 
@@ -17,6 +17,7 @@ local typst = require"typst"
 
 -----------------------------------------------------
 --- Compiles pdf with given template and optional data
+--- Only works with string, number, bool and table
 --- @param string template name
 --- @param table|nil data 
 --- @return string|nil pdf bytes
@@ -27,6 +28,7 @@ local pdf_bytes, err = typst.compile(
        world = "World!",
     }
 )
+
 ```
 
 ## Example

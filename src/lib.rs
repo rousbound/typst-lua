@@ -1,171 +1,141 @@
 #![allow(non_snake_case)]
-#![allow(temporary_cstring_as_ptr)]
-use std::{
-    ffi::{CStr, CString},
-    os::raw::c_int,
-};
+extern crate alloc;
+use bstr::BString;
 
-#[cfg(feature = "lua54")]
-extern crate rlua_lua54 as rlua;
-
+#[cfg(feature = "lua51")]
+extern crate mlua51_lua51 as mlua;
+#[cfg(feature = "lua52")]
+extern crate mlua52_lua52 as mlua;
 #[cfg(feature = "lua53")]
-extern crate rlua_lua53 as rlua;
-use rlua::*;
-use typst_compiler::{compile as typst_compile};
-use libc::{size_t};
-use typst::eval::{Value, Dict, Array};
+extern crate mlua53_lua53 as mlua;
+#[cfg(feature = "lua54")]
+extern crate mlua54_lua54 as mlua;
 
+use mlua::prelude::*;
+use typst::eval::{Array, Dict, Value as TypstValue};
+use typst_compiler::compile as typst_compile;
 
-#[no_mangle]
-#[allow(clippy::missing_safety_doc)]
-// Define a C-compatible function to be called when the library is loaded
-pub unsafe extern "C" fn luaopen_typst(L: *mut lua_State) -> c_int {
-    // Create a new table to hold the library's functions
-    lua_newtable(L);
-
-    lua_add_method(L, -2, "compile", compile); // Add the __gc method directly to the metatable
-    1
+#[mlua::lua_module]
+pub fn typst(lua: &Lua) -> LuaResult<LuaTable> {
+    let typst_table = lua.create_table()?;
+    typst_table.set(
+        "compile",
+        lua.create_function(|lua, args: (String, LuaValue)| compile(lua, args))?,
+    )?;
+    Ok(typst_table)
 }
-unsafe extern "C" fn compile(L: *mut lua_State) -> c_int {
-    // Grab the second argument from the Lua stack as raw C string
-    let input = lua_to_rust_string(L, 1);
 
-    let mut data: Option<Value> = None;
-    if !lua_isnil(L, 2) {
-        let result = lua_table_to_typst_value(L, 2);
-
-        data = match result {
-            Ok(result) => Some(result),
-            Err(e) => {
-                let error_message = CString::new(e.to_string()).unwrap();
-                lua_pushnil(L);
-                lua_pushlstring(L, error_message.as_ptr(), error_message.
-                                as_bytes_with_nul().len() as size_t);
-                return 2
-            }
-        }
-    }
+fn compile(
+    _lua: &Lua,
+    (input, data): (String, LuaValue),
+) -> LuaResult<(Option<BString>, Option<String>)> {
+    let data = match data {
+        LuaValue::Table(table) => lua_table_to_typst_value(table)?,
+        _ => None,
+    };
 
     let result = typst_compile(&input, &data);
 
     match result {
-        Ok(bytes) => {
-            lua_pushlstring(L, bytes.as_ptr() as *const i8, bytes.len() as size_t);
-            lua_pushnil(L);
-            2
-        }
-        Err(e) => {
-            let error_message = CString::new(e.to_string()).expect("Error");
-            lua_pushnil(L);
-            lua_pushlstring(L, error_message.as_ptr(), error_message.as_bytes_with_nul().len() as size_t);
-            2
-        }
+        Ok(bytes) => Ok((Some(BString::from(bytes)), None)),
+        Err(e) => Ok((None, Some(e.to_string()))),
     }
 }
 
-/// Helper function to add a Lua method to the table at the given index.
-unsafe fn lua_add_method(
-    L: *mut lua_State,
-    index: c_int,
-    name: &'static str,
-    f: unsafe extern "C" fn(*mut lua_State) -> c_int)
-{
-
-    lua_pushcfunction(L, Some(f));
-    lua_setfield(L, index, CString::new(name).expect("Error").as_ptr());
-}
-
-
-/// Helper function to retrieve a string from the Lua state and convert it to a Rust string.
-unsafe fn lua_to_rust_string(L: *mut lua_State, index: c_int) -> String {
-    let mut size: size_t = 0;
-    let raw_str = lua_tolstring(L, index, &mut size);
-    CStr::from_ptr(raw_str).to_str().expect("Error").to_owned()
-}
-
-unsafe fn lua_to_rust_string_no_pop(L: *mut lua_State, index: c_int) -> String {
-    let raw_str = lua_tolstring(L, index, &mut 0);
-    CStr::from_ptr(raw_str).to_str().unwrap().to_owned()
-}
-
-unsafe fn lua_table_to_typst_value(L: *mut lua_State, mut index: c_int) -> Result<Value, &'static str> {
-    index = lua_absindex(L, index);
-
+fn lua_table_to_typst_value(table: mlua::Table) -> LuaResult<Option<TypstValue>> {
     let mut arr = Array::new();
     let mut map = Dict::new();
     let mut is_array = true;
     let mut expected_key = 1;
 
-    lua_pushnil(L);
-    while lua_next(L, index) != 0 {
-        let value = match lua_type(L, -1) {
-            LUA_TSTRING => {
-                Ok(Value::Str(lua_to_rust_string_no_pop(L, -1).into()))
-            },
-            LUA_TTABLE => {
-                Ok(lua_table_to_typst_value(L, -1).unwrap())
-            },
-            LUA_TNUMBER => {
-                let number = lua_tonumber(L, -1);
-                Ok(Value::Float(number))
-            },
-            LUA_TBOOLEAN => {
-                let boolean = lua_toboolean(L, -1) != 0;
-                Ok(Value::Bool(boolean))
-            },
-            LUA_TUSERDATA => {
-                let raw_ptr = lua_touserdata(L, -1) as *mut Value;
-                if raw_ptr.is_null() {
-                    Err("Received null pointer from Lua")
-                } else {
-                    let value = unsafe {
-                        // dereference the pointer to get the Value object
-                        (*raw_ptr).clone() 
-                    };
-                    Ok(value)
-                }
-            },
-            _ => Err("Type not expected, table should contain only string, number, table or boolean values")
-        }?;
-        // Check the key type
-        match lua_type(L, -2) {
-            LUA_TNUMBER => {
-                let key_as_int = lua_tonumber(L, -2) as i32;
-                if key_as_int != expected_key {
-                    is_array = false;
-                }
-                expected_key += 1;
-                if is_array {
-                    arr.push(value.clone());
-                }
-                let key = key_as_int.to_string();
-                map.insert(key.into(), value);
-            },
-            LUA_TSTRING => {
-                is_array = false;
-                let key = lua_to_rust_string_no_pop(L, -2);
-                map.insert(key.into(), value);
-            },
-            LUA_TBOOLEAN => {
-                is_array = false;
-                let key = lua_toboolean(L, -1) != 0;
-                map.insert(key.to_string().into(), value);
-            },
-            _ => {
-                lua_pop(L, 1);
-                return Err("Non-string or non-number key found");
-            },
-        }
-        lua_pop(L, 1); // Pop the value
+    for pair in table.pairs::<LuaValue, LuaValue>() {
+        let (key, value) = pair?;
+        let converted_value = lua_value_to_typst_value(value)?;
+        update_data(
+            &mut arr,
+            &mut map,
+            &mut is_array,
+            &mut expected_key,
+            key,
+            converted_value,
+        )?;
     }
 
     if is_array {
-        Ok(Value::Array(arr))
+        Ok(Some(TypstValue::Array(arr)))
     } else {
-        Ok(Value::Dict(map))
+        Ok(Some(TypstValue::Dict(map)))
     }
 }
 
+fn lua_value_to_typst_value(value: LuaValue) -> LuaResult<TypstValue> {
+    match value {
+        LuaValue::String(s) => Ok(TypstValue::Str(s.to_str()?.to_owned().into())),
+        LuaValue::Table(t) => {
+            let inner_value = lua_table_to_typst_value(t)?;
+            inner_value.ok_or_else(|| LuaError::ToLuaConversionError {
+                from: "Unsupported type",
+                to: "Value",
+                message: Some("Table type not supported".to_string()),
+            })
+        }
+        LuaValue::Number(n) => Ok(TypstValue::Float(n)),
+        LuaValue::Integer(n) => Ok(TypstValue::Int(n as i64)),
+        LuaValue::Boolean(b) => Ok(TypstValue::Bool(b)),
+        e => Err(LuaError::ToLuaConversionError {
+            from: "Unsupported type",
+            to: "Value",
+            message: Some(format!("{} -- {}", e.to_string().unwrap(), e.type_name())),
+        }),
+    }
+}
 
-
-
+fn update_data(
+    arr: &mut Array,
+    map: &mut Dict,
+    is_array: &mut bool,
+    expected_key: &mut i32,
+    key: LuaValue,
+    value: TypstValue,
+) -> LuaResult<()> {
+    match key {
+        LuaValue::Number(n) => {
+            if n as i32 != *expected_key {
+                *is_array = false;
+            }
+            *expected_key += 1;
+            if *is_array {
+                arr.push(value);
+            } else {
+                map.insert(n.to_string().into(), value);
+            }
+        }
+        LuaValue::Integer(n) => {
+            if n as i32 != *expected_key {
+                *is_array = false;
+            }
+            *expected_key += 1;
+            if *is_array {
+                arr.push(value);
+            } else {
+                map.insert(n.to_string().into(), value);
+            }
+        }
+        LuaValue::String(s) => {
+            *is_array = false;
+            map.insert(s.to_str()?.to_owned().into(), value);
+        }
+        LuaValue::Boolean(b) => {
+            *is_array = false;
+            map.insert(b.to_string().into(), value);
+        }
+        e => {
+            return Err(LuaError::ToLuaConversionError {
+                from: "Unsupported key type",
+                to: "String or Number",
+                message: Some(format!("{}", e.to_string().unwrap())),
+            })
+        }
+    }
+    Ok(())
+}
