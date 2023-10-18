@@ -2,7 +2,7 @@
 
 
 Lua binding to [typst](https://github.com/typst/typst),
-a new markup-based typesetting system that is powerful and easy to learn. Also has enables lua to pass certain values directly to typst.
+a new markup-based typesetting system that is powerful and easy to learn. Also has arguments that enable lua to pass certain values directly to typst.
 
 ## Installation
 
