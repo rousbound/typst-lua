@@ -6,7 +6,7 @@ source = {
 }
 
 description = {
-    summary = "Typst binding for Lua 5.3",
+    summary = "Typst binding for Lua",
     detailed = "Typst-lua is a simple interface from Lua to Typst for Lua 5.3. It enables a Lua program to generate complex and dynamic pdfs, by passing variables directly to typst. ",
     homepage = "https://github.com/rousbound/typst-lua",
     license = "APACHE"
