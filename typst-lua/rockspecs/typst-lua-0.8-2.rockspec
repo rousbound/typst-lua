@@ -1,9 +1,8 @@
 package = "typst-lua"
-version = "0.8.0-2"
+version = "0.8-2"
 
 source = {
     url = "git+https://github.com/rousbound/typst-lua",
-    tag = "0.8.0",
 }
 
 description = {
