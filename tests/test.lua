@@ -1,13 +1,8 @@
 local typst = require"typst"
 -- Generate color functions in global _ENV scope
-for c, cc in pairs(
-{
-	green = {"\27[32m", "\27[0m"},
-	yellow = {"\x1b[33m", "\x1b[0m"},
-	blue = {"\027[34m", "\027[0m"},
-}) do
-	_ENV[c] = function(s) return cc[1]..s..cc[2] end
-end
+local green = function(s) return "\27[32m"..s.. "\27[0m" end
+local yellow = function(s) return "\x1b[33m"..s.."\x1b[0m" end
+local blue = function(s) return "\027[34m"..s.. "\027[0m" end
 
 local join = function (t) return table.concat(t, "/") end
 
@@ -15,7 +10,6 @@ local join = function (t) return table.concat(t, "/") end
 local tests = {
 	compile = {
 		["test.typ"] = {"test.lua"},
-		--["test_json.typ"] = {"test_json.lua"},
 		["test_blank.typ"] = {}
 	},
 }
