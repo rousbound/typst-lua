@@ -12,7 +12,7 @@ extern crate mlua53_lua53 as mlua;
 extern crate mlua54_lua54 as mlua;
 
 use mlua::prelude::*;
-use typst::eval::{Array, Dict, Value};
+use typst::eval::{Array, Dict, Value as TypstValue};
 use typst_compiler::compile as typst_compile;
 
 #[mlua::lua_module]
@@ -42,86 +42,51 @@ fn compile(
     }
 }
 
-fn lua_table_to_typst_value(table: mlua::Table) -> LuaResult<Option<Value>> {
+fn lua_table_to_typst_value(table: mlua::Table) -> LuaResult<Option<TypstValue>> {
     let mut arr = Array::new();
     let mut map = Dict::new();
     let mut is_array = true;
     let mut expected_key = 1;
 
-    for pair in table.pairs::<mlua::Value, mlua::Value>() {
+    for pair in table.pairs::<LuaValue, LuaValue>() {
         let (key, value) = pair?;
-        match value {
-            LuaValue::String(s) => {
-                let val = Value::Str(s.to_str()?.to_owned().into());
-                update_data(
-                    &mut arr,
-                    &mut map,
-                    &mut is_array,
-                    &mut expected_key,
-                    key,
-                    val,
-                )?;
-            }
-            LuaValue::Table(t) => {
-                let inner_value = lua_table_to_typst_value(t)?;
-                if let Some(val) = inner_value {
-                    update_data(
-                        &mut arr,
-                        &mut map,
-                        &mut is_array,
-                        &mut expected_key,
-                        key,
-                        val,
-                    )?;
-                }
-            }
-            LuaValue::Number(n) => {
-                let val = Value::Float(n);
-                update_data(
-                    &mut arr,
-                    &mut map,
-                    &mut is_array,
-                    &mut expected_key,
-                    key,
-                    val,
-                )?;
-            }
-            LuaValue::Integer(n) => {
-                let val = Value::Int(n as i64);
-                update_data(
-                    &mut arr,
-                    &mut map,
-                    &mut is_array,
-                    &mut expected_key,
-                    key,
-                    val,
-                )?;
-            }
-            LuaValue::Boolean(b) => {
-                let val = Value::Bool(b);
-                update_data(
-                    &mut arr,
-                    &mut map,
-                    &mut is_array,
-                    &mut expected_key,
-                    key,
-                    val,
-                )?;
-            }
-            e => {
-                return Err(LuaError::ToLuaConversionError {
-                    from: "Unsupported type",
-                    to: "Value",
-                    message: Some(format!("{} -- {}", e.to_string().unwrap(), e.type_name())),
-                })
-            }
-        }
+        let converted_value = lua_value_to_typst_value(value)?;
+        update_data(
+            &mut arr,
+            &mut map,
+            &mut is_array,
+            &mut expected_key,
+            key,
+            converted_value,
+        )?;
     }
 
     if is_array {
-        Ok(Some(Value::Array(arr)))
+        Ok(Some(TypstValue::Array(arr)))
     } else {
-        Ok(Some(Value::Dict(map)))
+        Ok(Some(TypstValue::Dict(map)))
+    }
+}
+
+fn lua_value_to_typst_value(value: LuaValue) -> LuaResult<TypstValue> {
+    match value {
+        LuaValue::String(s) => Ok(TypstValue::Str(s.to_str()?.to_owned().into())),
+        LuaValue::Table(t) => {
+            let inner_value = lua_table_to_typst_value(t)?;
+            inner_value.ok_or_else(|| LuaError::ToLuaConversionError {
+                from: "Unsupported type",
+                to: "Value",
+                message: Some("Table type not supported".to_string()),
+            })
+        }
+        LuaValue::Number(n) => Ok(TypstValue::Float(n)),
+        LuaValue::Integer(n) => Ok(TypstValue::Int(n as i64)),
+        LuaValue::Boolean(b) => Ok(TypstValue::Bool(b)),
+        e => Err(LuaError::ToLuaConversionError {
+            from: "Unsupported type",
+            to: "Value",
+            message: Some(format!("{} -- {}", e.to_string().unwrap(), e.type_name())),
+        }),
     }
 }
 
@@ -130,8 +95,8 @@ fn update_data(
     map: &mut Dict,
     is_array: &mut bool,
     expected_key: &mut i32,
-    key: mlua::Value,
-    value: Value,
+    key: LuaValue,
+    value: TypstValue,
 ) -> LuaResult<()> {
     match key {
         LuaValue::Number(n) => {
@@ -140,9 +105,10 @@ fn update_data(
             }
             *expected_key += 1;
             if *is_array {
-                arr.push(value.clone());
+                arr.push(value);
+            } else {
+                map.insert(n.to_string().into(), value);
             }
-            map.insert(n.to_string().into(), value);
         }
         LuaValue::Integer(n) => {
             if n as i32 != *expected_key {
@@ -150,9 +116,10 @@ fn update_data(
             }
             *expected_key += 1;
             if *is_array {
-                arr.push(value.clone());
+                arr.push(value);
+            } else {
+                map.insert(n.to_string().into(), value);
             }
-            map.insert(n.to_string().into(), value);
         }
         LuaValue::String(s) => {
             *is_array = false;
@@ -160,7 +127,7 @@ fn update_data(
         }
         LuaValue::Boolean(b) => {
             *is_array = false;
-            map.insert(b.to_string().to_owned().into(), value);
+            map.insert(b.to_string().into(), value);
         }
         e => {
             return Err(LuaError::ToLuaConversionError {
