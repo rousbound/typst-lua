@@ -22,60 +22,6 @@ jobs:
     - name: Setup Lua
       uses: leafo/gh-actions-lua@v10
       with:
-        luaVersion: "5.1"
-    - name: Build
-      run: cargo build --verbose --features "lua51"
-    - name: Run Rust tests
-      run: cargo test --verbose --features "lua51"
-    - name: Create Symbolic Link
-      run: ln -s $GITHUB_WORKSPACE/target/lua51/libtypst.so $GITHUB_WORKSPACE/tests/typst.so
-    - name: Check symbolic link
-      run: ls -l $GITHUB_WORKSPACE/tests
-    - name: Run Lua tests
-      run: |
-        lua -v
-        cd tests
-        ls -l
-        lua test.lua
-  build:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v3
-    - name: Setup Rust
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: 1.70.0
-        override: true
-    - name: Setup Lua
-      uses: leafo/gh-actions-lua@v10
-      with:
-        luaVersion: "5.2"
-    - name: Build
-      run: cargo build --verbose --features "lua52"
-    - name: Run Rust tests
-      run: cargo test --verbose --features "lua52"
-    - name: Create Symbolic Link
-      run: ln -s $GITHUB_WORKSPACE/target/lua52/libtypst.so $GITHUB_WORKSPACE/tests/typst.so
-    - name: Check symbolic link
-      run: ls -l $GITHUB_WORKSPACE/tests
-    - name: Run Lua tests
-      run: |
-        lua -v
-        cd tests
-        ls -l
-        lua test.lua
-  build:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v3
-    - name: Setup Rust
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: 1.70.0
-        override: true
-    - name: Setup Lua
-      uses: leafo/gh-actions-lua@v10
-      with:
         luaVersion: "5.3"
     - name: Build
       run: cargo build --verbose --features "lua53"
@@ -118,5 +64,3 @@ jobs:
         cd tests
         ls -l
         lua test.lua
-
-
