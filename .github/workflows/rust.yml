@@ -28,7 +28,7 @@ jobs:
     - name: Run Rust tests
       run: cargo test --verbose --features "lua51" --target-dir=target/lua51
     - name: Create Symbolic Link
-      run: ln -s $GITHUB_WORKSPACE/target/lua51/libtypst.so $GITHUB_WORKSPACE/tests/typst.so
+      run: ln -s $GITHUB_WORKSPACE/target/lua51/debug/libtypst.so $GITHUB_WORKSPACE/tests/typst.so
     - name: Check symbolic link
       run: ls -l $GITHUB_WORKSPACE/tests
     - name: Run Lua tests
@@ -55,7 +55,7 @@ jobs:
     - name: Run Rust tests
       run: cargo test --verbose --features "lua52" --target-dir=target/lua52
     - name: Create Symbolic Link
-      run: ln -s $GITHUB_WORKSPACE/target/lua52/libtypst.so $GITHUB_WORKSPACE/tests/typst.so
+      run: ln -s $GITHUB_WORKSPACE/target/lua52/debug/libtypst.so $GITHUB_WORKSPACE/tests/typst.so
     - name: Check symbolic link
       run: ls -l $GITHUB_WORKSPACE/tests
     - name: Run Lua tests
@@ -82,7 +82,7 @@ jobs:
     - name: Run Rust tests
       run: cargo test --verbose --features "lua53" --target-dir=target/lua53
     - name: Create Symbolic Link
-      run: ln -s $GITHUB_WORKSPACE/target/lua53/libtypst.so $GITHUB_WORKSPACE/tests/typst.so
+      run: ln -s $GITHUB_WORKSPACE/target/lua53/debug/libtypst.so $GITHUB_WORKSPACE/tests/typst.so
     - name: Check symbolic link
       run: ls -l $GITHUB_WORKSPACE/tests
     - name: Run Lua tests
@@ -109,7 +109,7 @@ jobs:
     - name: Run Rust tests
       run: cargo test --verbose --features "lua54" --target-dir=target/lua54
     - name: Create Symbolic Link
-      run: ln -s $GITHUB_WORKSPACE/target/lua54/libtypst.so $GITHUB_WORKSPACE/tests/typst.so
+      run: ln -s $GITHUB_WORKSPACE/target/lua54/debug/libtypst.so $GITHUB_WORKSPACE/tests/typst.so
     - name: Check symbolic link
       run: ls -l $GITHUB_WORKSPACE/tests
     - name: Run Lua tests
