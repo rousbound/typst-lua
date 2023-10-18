@@ -17,7 +17,7 @@ jobs:
     - name: Setup Rust
       uses: actions-rs/toolchain@v1
       with:
-        toolchain: 1.70.0
+        toolchain: 1.71.0
         override: true
     - name: Setup Lua
       uses: leafo/gh-actions-lua@v10
@@ -44,7 +44,7 @@ jobs:
     - name: Setup Rust
       uses: actions-rs/toolchain@v1
       with:
-        toolchain: 1.70.0
+        toolchain: 1.71.0
         override: true
     - name: Setup Lua
       uses: leafo/gh-actions-lua@v10
@@ -71,7 +71,7 @@ jobs:
     - name: Setup Rust
       uses: actions-rs/toolchain@v1
       with:
-        toolchain: 1.70.0
+        toolchain: 1.71.0
         override: true
     - name: Setup Lua
       uses: leafo/gh-actions-lua@v10
@@ -98,7 +98,7 @@ jobs:
     - name: Setup Rust
       uses: actions-rs/toolchain@v1
       with:
-        toolchain: 1.70.0
+        toolchain: 1.71.0
         override: true
     - name: Setup Lua
       uses: leafo/gh-actions-lua@v10
