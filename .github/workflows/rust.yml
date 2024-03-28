@@ -1,0 +1,120 @@
+name: Rust
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build51:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Setup Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: 1.71.0
+        override: true
+    - name: Setup Lua
+      uses: leafo/gh-actions-lua@v10
+      with:
+        luaVersion: "5.1"
+    - name: Build
+      run: cargo build --verbose --features "lua51" --target-dir=target/lua51
+    - name: Run Rust tests
+      run: cargo test --verbose --features "lua51" --target-dir=target/lua51
+    - name: Create Symbolic Link
+      run: ln -s $GITHUB_WORKSPACE/target/lua51/debug/libtypst.so $GITHUB_WORKSPACE/tests/typst.so
+    - name: Check symbolic link
+      run: ls -l $GITHUB_WORKSPACE/tests
+    - name: Run Lua tests
+      run: |
+        lua -v
+        cd tests
+        ls -l
+        lua test.lua
+  build52:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Setup Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: 1.71.0
+        override: true
+    - name: Setup Lua
+      uses: leafo/gh-actions-lua@v10
+      with:
+        luaVersion: "5.2"
+    - name: Build
+      run: cargo build --verbose --features "lua52" --target-dir=target/lua52
+    - name: Run Rust tests
+      run: cargo test --verbose --features "lua52" --target-dir=target/lua52
+    - name: Create Symbolic Link
+      run: ln -s $GITHUB_WORKSPACE/target/lua52/debug/libtypst.so $GITHUB_WORKSPACE/tests/typst.so
+    - name: Check symbolic link
+      run: ls -l $GITHUB_WORKSPACE/tests
+    - name: Run Lua tests
+      run: |
+        lua -v
+        cd tests
+        ls -l
+        lua test.lua
+  build53:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Setup Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: 1.71.0
+        override: true
+    - name: Setup Lua
+      uses: leafo/gh-actions-lua@v10
+      with:
+        luaVersion: "5.3"
+    - name: Build
+      run: cargo build --verbose --features "lua53" --target-dir=target/lua53
+    - name: Run Rust tests
+      run: cargo test --verbose --features "lua53" --target-dir=target/lua53
+    - name: Create Symbolic Link
+      run: ln -s $GITHUB_WORKSPACE/target/lua53/debug/libtypst.so $GITHUB_WORKSPACE/tests/typst.so
+    - name: Check symbolic link
+      run: ls -l $GITHUB_WORKSPACE/tests
+    - name: Run Lua tests
+      run: |
+        lua -v
+        cd tests
+        ls -l
+        lua test.lua
+  build54:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Setup Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: 1.71.0
+        override: true
+    - name: Setup Lua
+      uses: leafo/gh-actions-lua@v10
+      with:
+        luaVersion: "5.4"
+    - name: Build
+      run: cargo build --verbose --features "lua54" --target-dir=target/lua54
+    - name: Run Rust tests
+      run: cargo test --verbose --features "lua54" --target-dir=target/lua54
+    - name: Create Symbolic Link
+      run: ln -s $GITHUB_WORKSPACE/target/lua54/debug/libtypst.so $GITHUB_WORKSPACE/tests/typst.so
+    - name: Check symbolic link
+      run: ls -l $GITHUB_WORKSPACE/tests
+    - name: Run Lua tests
+      run: |
+        lua -v
+        cd tests
+        ls -l
+        lua test.lua
