@@ -12,7 +12,9 @@ extern crate mlua53_lua53 as mlua;
 extern crate mlua54_lua54 as mlua;
 
 use mlua::prelude::*;
-use typst::eval::{Array, Dict, Value as TypstValue};
+// use typst::eval::{Array, Dict};
+use typst::foundations::{Dict, Array};
+use typst::foundations::Value as TypstValue;
 use typst_compiler::compile as typst_compile;
 
 #[mlua::lua_module]

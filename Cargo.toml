@@ -6,19 +6,19 @@ edition = "2021"
 
 # Add this line
 [lib]
-name = "typst"
+name = "typst_lua"
 crate-type = ["cdylib"]
 
 [dependencies]
-typst-compiler = { path = "typst-compiler" }
+typst_compiler = { path = "typst-compiler" }
 typst = { git = "https://github.com/typst/typst", package = "typst"}
 libc = "0.2"
 bstr = { version = "1.7.0", features = ["alloc"] }
 
-mlua51_lua51 = { git = "https://github.com/khvzak/mlua", package= "mlua", features = ["lua51", "module"], optional = true }
-mlua52_lua52 = { git = "https://github.com/khvzak/mlua", package= "mlua", features = ["lua52", "module"], optional = true }
-mlua53_lua53 = { git = "https://github.com/khvzak/mlua", package= "mlua", features = ["lua53", "module"], optional = true }
-mlua54_lua54 = { git = "https://github.com/khvzak/mlua", package = "mlua", features = ["lua54", "module"], optional = true }
+mlua51_lua51 = { git = "https://github.com/mlua-rs/mlua", package= "mlua", features = ["lua51", "module"], optional = true }
+mlua52_lua52 = { git = "https://github.com/mlua-rs/mlua", package= "mlua", features = ["lua52", "module"], optional = true }
+mlua53_lua53 = { git = "https://github.com/mlua-rs/mlua", package= "mlua", features = ["lua53", "module"], optional = true }
+mlua54_lua54 = { git = "https://github.com/mlua-rs/mlua", package = "mlua", features = ["lua54", "module"], optional = true }
 
 
 [features]
@@ -31,7 +31,7 @@ lua54 = ["mlua54_lua54"]
 opt-level = 3
 incremental = true
 lto = true
-strip = true
+# strip = true
 #panic = 'abort'
 
 [profile.dev]

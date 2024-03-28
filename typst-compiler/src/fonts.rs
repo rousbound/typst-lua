@@ -1,12 +1,31 @@
-use std::cell::OnceCell;
-use std::env;
-use std::fs::{self, File};
-use std::path::{Path, PathBuf};
+use std::fs;
+use std::path::PathBuf;
+use std::sync::OnceLock;
 
-use memmap2::Mmap;
-use typst::eval::Bytes;
-use typst::font::{Font, FontBook, FontInfo};
-use walkdir::WalkDir;
+use fontdb::{Database, Source};
+use typst::diag::StrResult;
+use typst::text::{Font, FontBook, FontInfo, FontVariant};
+use typst_timing::TimingScope;
+
+use crate::args::FontsCommand;
+
+/// Execute a font listing command.
+pub fn fonts(command: &FontsCommand) -> StrResult<()> {
+    let mut searcher = FontSearcher::new();
+    searcher.search(&command.font_paths);
+
+    for (name, infos) in searcher.book.families() {
+        println!("{name}");
+        if command.variants {
+            for info in infos {
+                let FontVariant { style, weight, stretch } = info.variant;
+                println!("- Style: {style:?}, Weight: {weight:?}, Stretch: {stretch:?}");
+            }
+        }
+    }
+
+    Ok(())
+}
 
 /// Searches for fonts.
 pub struct FontSearcher {
@@ -24,7 +43,7 @@ pub struct FontSlot {
     /// to a collection.
     index: u32,
     /// The lazily loaded font.
-    font: OnceCell<Option<Font>>,
+    font: OnceLock<Option<Font>>,
 }
 
 impl FontSlot {
@@ -32,6 +51,7 @@ impl FontSlot {
     pub fn get(&self) -> Option<Font> {
         self.font
             .get_or_init(|| {
+                let _scope = TimingScope::new("load font", None);
                 let data = fs::read(&self.path).ok()?.into();
                 Font::new(data, self.index)
             })
@@ -47,12 +67,39 @@ impl FontSearcher {
 
     /// Search everything that is available.
     pub fn search(&mut self, font_paths: &[PathBuf]) {
+        let mut db = Database::new();
+
+        // Font paths have highest priority.
         for path in font_paths {
-            self.search_dir(path)
+            db.load_fonts_dir(path);
         }
 
-        self.search_system();
+        // System fonts have second priority.
+        db.load_system_fonts();
 
+        for face in db.faces() {
+            let path = match &face.source {
+                Source::File(path) | Source::SharedFile(path, _) => path,
+                // We never add binary sources to the database, so there
+                // shouln't be any.
+                Source::Binary(_) => continue,
+            };
+
+            let info = db
+                .with_face_data(face.id, FontInfo::new)
+                .expect("database must contain this font");
+
+            if let Some(info) = info {
+                self.book.push(info);
+                self.fonts.push(FontSlot {
+                    path: path.clone(),
+                    index: face.index,
+                    font: OnceLock::new(),
+                });
+            }
+        }
+
+        // Embedded fonts have lowest priority.
         #[cfg(feature = "embed-fonts")]
         self.add_embedded();
     }
@@ -60,102 +107,15 @@ impl FontSearcher {
     /// Add fonts that are embedded in the binary.
     #[cfg(feature = "embed-fonts")]
     fn add_embedded(&mut self) {
-        let mut process = |bytes: &'static [u8]| {
-            let buffer = Bytes::from_static(bytes);
+        for data in typst_assets::fonts() {
+            let buffer = typst::foundations::Bytes::from_static(data);
             for (i, font) in Font::iter(buffer).enumerate() {
                 self.book.push(font.info().clone());
                 self.fonts.push(FontSlot {
                     path: PathBuf::new(),
                     index: i as u32,
-                    font: OnceCell::from(Some(font)),
+                    font: OnceLock::from(Some(font)),
                 });
-            }
-        };
-
-        macro_rules! add {
-            ($filename:literal) => {
-                process(include_bytes!(concat!("../assets/fonts/", $filename)));
-            };
-        }
-
-        // Embed default fonts.
-        add!("LinLibertine_R.ttf");
-        add!("LinLibertine_RB.ttf");
-        add!("LinLibertine_RBI.ttf");
-        add!("LinLibertine_RI.ttf");
-        add!("NewCMMath-Book.otf");
-        add!("NewCMMath-Regular.otf");
-        add!("NewCM10-Regular.otf");
-        add!("NewCM10-Bold.otf");
-        add!("NewCM10-Italic.otf");
-        add!("NewCM10-BoldItalic.otf");
-        add!("DejaVuSansMono.ttf");
-        add!("DejaVuSansMono-Bold.ttf");
-        add!("DejaVuSansMono-Oblique.ttf");
-        add!("DejaVuSansMono-BoldOblique.ttf");
-    }
-
-    /// Search for fonts in the linux system font directories.
-    fn search_system(&mut self) {
-        if cfg!(target_os = "macos") {
-            self.search_dir("/Library/Fonts");
-            self.search_dir("/Network/Library/Fonts");
-            self.search_dir("/System/Library/Fonts");
-        } else if cfg!(unix) {
-            self.search_dir("/usr/share/fonts");
-            self.search_dir("/usr/local/share/fonts");
-        } else if cfg!(windows) {
-            self.search_dir(
-                env::var_os("WINDIR")
-                    .map(PathBuf::from)
-                    .unwrap_or_else(|| "C:\\Windows".into())
-                    .join("Fonts"),
-            );
-
-            if let Some(roaming) = dirs::config_dir() {
-                self.search_dir(roaming.join("Microsoft\\Windows\\Fonts"));
-            }
-
-            if let Some(local) = dirs::cache_dir() {
-                self.search_dir(local.join("Microsoft\\Windows\\Fonts"));
-            }
-        }
-
-        if let Some(dir) = dirs::font_dir() {
-            self.search_dir(dir);
-        }
-    }
-
-    /// Search for all fonts in a directory recursively.
-    fn search_dir(&mut self, path: impl AsRef<Path>) {
-        for entry in WalkDir::new(path)
-            .follow_links(true)
-            .sort_by(|a, b| a.file_name().cmp(b.file_name()))
-            .into_iter()
-            .filter_map(|e| e.ok())
-        {
-            let path = entry.path();
-            if matches!(
-                path.extension().and_then(|s| s.to_str()),
-                Some("ttf" | "otf" | "TTF" | "OTF" | "ttc" | "otc" | "TTC" | "OTC"),
-            ) {
-                self.search_file(path);
-            }
-        }
-    }
-
-    /// Index the fonts in the file at the given path.
-    fn search_file(&mut self, path: &Path) {
-        if let Ok(file) = File::open(path) {
-            if let Ok(mmap) = unsafe { Mmap::map(&file) } {
-                for (i, info) in FontInfo::iter(&mmap).enumerate() {
-                    self.book.push(info);
-                    self.fonts.push(FontSlot {
-                        path: path.into(),
-                        index: i as u32,
-                        font: OnceCell::new(),
-                    });
-                }
             }
         }
     }
