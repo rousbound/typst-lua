@@ -15,19 +15,7 @@ luarocks install typst-lua
 ```lua
 local typst = require"typst"
 
------------------------------------------------------
---- Compiles pdf with given template and optional data
---- Only works with string, number, bool and table
---- @param string template name
---- @param table|nil data 
---- @return string|nil pdf bytes
---- @return string|nil error message
-local pdf_bytes, err = typst.compile(
-    "helloworld.typ",
-    {
-       world = "World!",
-    }
-)
+local pdf_bytes, err = typst.compile( "helloworld.typ", { who = "World!"} )
 
 ```
 
@@ -35,7 +23,7 @@ local pdf_bytes, err = typst.compile(
 
 Example with the lua code above in the following "helloworld.typ" file:
 ```typst
-Hello #_LUADATA.world
+Hello #_LUADATA.who
 
 ```
 
