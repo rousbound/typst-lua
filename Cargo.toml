@@ -6,7 +6,7 @@ edition = "2021"
 
 # Add this line
 [lib]
-name = "typst_lua"
+name = "typst"
 crate-type = ["cdylib"]
 
 [dependencies]
