@@ -18,6 +18,7 @@ impl FromLuaTypst for LuaValue {
 
             LuaValue::Boolean(b) => Ok(Value::Bool(b)),
             LuaValue::Number(n)  => Ok(Value::Float(n)),
+            LuaValue::Integer(n)  => Ok(Value::Int(n)),
 
             LuaValue::String(s) => {
                 let s = s.to_str()?.to_string();     // MUST convert BorrowedStr → String
@@ -56,6 +57,20 @@ impl FromLuaTypst for LuaTable {
 
             match key {
                 // numeric key
+                LuaValue::Integer(idx) => {
+                    if idx != expected {
+                        is_array = false;
+                    }
+                    expected += 1;
+
+                    if is_array {
+                        arr.push(v.clone());
+                    }
+
+                    map.insert(Str::from(idx.to_string()), v);
+                }
+
+    // numeric key (float but integer-valued)
                 LuaValue::Number(n) if n.fract() == 0.0 => {
                     let idx = n as i64;
 

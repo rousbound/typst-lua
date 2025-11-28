@@ -1,85 +1,113 @@
-local typst = require"typst"
--- Generate color functions in global _ENV scope
-local green = function(s) return "\27[32m"..s.. "\27[0m" end
-local yellow = function(s) return "\x1b[33m"..s.."\x1b[0m" end
-local blue = function(s) return "\027[34m"..s.. "\027[0m" end
+local socket = require "socket"     -- <-- gives socket.gettime()
 
-local join = function (t) return table.concat(t, "/") end
+package.cpath = "./?.so;" .. package.cpath
+local typst = require "typst"
 
+-- Colors
+local function color(code)
+    return function(s)
+        return ("\27[%sm%s\27[0m"):format(code, s)
+    end
+end
+local green  = color "32"
+local yellow = color "33"
+local blue   = color "34"
+
+local join = function(t) return table.concat(t, "/") end
 
 local tests = {
-	compile = {
-		["test.typ"] = {"test.lua"},
-		["test_blank.typ"] = {}
-	},
+    compile = {
+        ["test.typ"]       = {"test.lua"},
+        ["test_blank.typ"] = {},
+        ["test_extended.typ"] = {"test_typ_extended.lua"},
+    },
 }
 
 local output_dir = "output"
-local data_dir = "data"
+local data_dir   = "data"
 
-local function write_pdf(bytes, output)
-	local fh, err = io.open(output, "wb")
-	fh:write(bytes)
-	fh:close()
+---------------------------------------------------------
+-- Utility
+---------------------------------------------------------
+
+local function keys(t)
+    local r = {}
+    for k in pairs(t) do r[#r+1] = k end
+    return r
 end
 
-local function genpdf(template, file) 
-	io.write(
-		"Template '"..blue(template).."' "..(file and " with '"..yellow(file).."': " or "")
-	)
-	local test_data
-	if file then 
-		local path
-		path = join{data_dir, file}
-		test_data = loadfile(path, "t", {typst = typst})()
-		assert(test_data, "Test data not found on path '"..path.."'")
-	end
-
-	print("Passing control to typst-compiler")
-	local pdf_bytes, err = typst.compile(join{"templates", template}, test_data)
-
-	assert(not err, "Error: "..tostring(err))
-
-
-	assert(pdf_bytes,
-		"Error generating pdf file of template '"..template.."': \n"
-		.."Typst error: "..tostring(err)
-	)
-
-	assert(
-		string.sub(pdf_bytes, 1, 5) == "%PDF-",
-		"File generating isn't a pdf '"..template.."'"
-	)
-
-	write_pdf(
-		pdf_bytes,
-		join{output_dir, template..".pdf"}
-	)
-	print(green("OK"))
+local function write_pdf(bytes, outpath)
+    local fh = assert(io.open(outpath, "wb"))
+    fh:write(bytes)
+    fh:close()
 end
 
+---------------------------------------------------------
+-- PDF generation test (with millisecond timing)
+---------------------------------------------------------
 
-local function test(template, files, method)
-	assert(files, "Test not defined")
-	if #files > 0 then 
-		for _, file in pairs(files) do
-			genpdf(template, file)
-		end
-	else
-		genpdf(template)
-	end
+local function genpdf(template, data_file)
+    io.write("Template " .. blue(template))
 
+    if data_file then
+        io.write(" with " .. yellow(data_file))
+    end
+    io.write(": ")
+
+    -- Load data
+    local data = nil
+    if data_file then
+        local path = join{data_dir, data_file}
+        data = assert(loadfile(path, "t", { typst = typst })(),
+            "Test data not found at " .. path)
+    end
+
+    -----------------------------------------------------
+    -- HIGH-RES wall clock
+    -----------------------------------------------------
+    local t0 = socket.gettime()    -- seconds with microsecond precision
+
+    print("Passing control to typst-compiler")
+    local pdf_bytes, err = typst.compile(join{"templates", template}, data)
+
+    assert(not err, "Typst error: " .. tostring(err))
+    assert(pdf_bytes and pdf_bytes:sub(1,5) == "%PDF-", "Invalid PDF output")
+
+    write_pdf(pdf_bytes, join{output_dir, template .. ".pdf"})
+
+    local ms = (socket.gettime() - t0) * 1000
+
+    print(green("OK") .. ("  [time: %.2f ms]"):format(ms))
 end
 
-for method, tests in pairs(tests) do 
-	local keys = {}
-	for key in pairs(tests) do
-		table.insert(keys, key)
-	end
-	table.sort(keys)
-	for _, key in ipairs(keys) do
-		test(key, tests[key], method)
-	end
+---------------------------------------------------------
+-- Test dispatcher
+---------------------------------------------------------
+
+local function run_test(template, files)
+    if #files > 0 then
+        for _, f in ipairs(files) do genpdf(template, f) end
+    else
+        genpdf(template)
+    end
 end
-print()
-print(green("All tests were successfull"))
+
+---------------------------------------------------------
+-- Main loop
+---------------------------------------------------------
+
+local function main()
+    for method, group in pairs(tests) do
+        local ts = keys(group)
+        table.sort(ts)
+        for _, template in ipairs(ts) do
+            run_test(template, group[template])
+        end
+    end
+
+    print()
+    print(green("All tests were successful"))
+end
+
+main()
+
