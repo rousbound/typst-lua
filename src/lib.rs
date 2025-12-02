@@ -21,16 +21,23 @@ impl FromLuaTypst for LuaValue {
             LuaValue::Integer(n)  => Ok(Value::Int(n)),
 
             LuaValue::String(s) => {
-                let s = s.to_str()?.to_string();     // MUST convert BorrowedStr → String
-                Ok(Value::Str(Str::from(s)))
+                match s.to_str() {
+                    Ok(text) => Ok(Value::Str(Str::from(text.to_string()))),
+                    Err(_) => {
+                        let bytes_vec: Vec<u8> = s.as_bytes().to_vec();
+                        Ok(Value::Bytes(typst::foundations::Bytes::new(bytes_vec)))
+                    }
+                }
             }
 
             LuaValue::Table(t) => t.to_typst(lua),
 
             LuaValue::UserData(ud) => {
-                let val = ud.borrow::<Value>()?;
-                Ok(val.clone())
-            }
+                 return Err(LuaError::RuntimeError(
+                    "Lua userdata cannot be converted to Typst value".into()
+                ));
+            },
+
 
             other => Err(LuaError::RuntimeError(format!(
                 "Unsupported Lua value: {other:?}"
@@ -121,17 +128,30 @@ impl FromLuaTypst for LuaTable {
 // Compile function exposed to Lua
 // -------------------------------------
 
-fn compile(lua: &Lua, (input, data): (LuaString, LuaValue)) -> LuaResult<LuaString> {
+fn compile(lua: &Lua, (input, data): (LuaString, LuaValue)) -> LuaResult<(Option<LuaString>, Option<LuaString>)> {
     let input_text = input.to_str()?.to_string();
-
-    let typst_value = data.to_typst(lua)?;
-
-    // compile → Vec<u8>
-    let pdf_bytes = typst_as_library::compile(&input_text, &Some(typst_value))
-        .map_err(|e| LuaError::RuntimeError(e.to_string()))?;
-
-    // Convert Vec<u8> → Lua binary string
-    lua.create_string(&pdf_bytes)
+    
+    // Convert Lua → Typst value
+    let typst_value = match data.to_typst(lua) {
+        Ok(val) => val,
+        Err(e) => {
+            let err_msg = lua.create_string(&format!("typst-lua: error converting lua value to typst value : {e}"))?;
+            return Ok((None, Some(err_msg)));
+        }
+    };
+    
+    // Call typst compiler
+    let pdf_bytes = match typst_as_library::compile(&input_text, &Some(typst_value)) {
+        Ok(bytes) => bytes,
+        Err(e) => {
+            let err_msg = lua.create_string(&format!("typst: {e}"))?;
+            return Ok((None, Some(err_msg)));
+        }
+    };
+    
+    // Convert result to lua string
+    let pdf = lua.create_string(&pdf_bytes)?;
+    Ok((Some(pdf), None))
 }
 
 

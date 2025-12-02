@@ -1,39 +1,13 @@
-local socket = require "socket"     -- <-- gives socket.gettime()
-
+local socket = require "socket"
 package.cpath = "./?.so;" .. package.cpath
 local typst = require "typst"
-
--- Colors
-local function color(code)
-    return function(s)
-        return ("\27[%sm%s\27[0m"):format(code, s)
-    end
-end
-local green  = color "32"
-local yellow = color "33"
-local blue   = color "34"
-
-local join = function(t) return table.concat(t, "/") end
-
-local tests = {
-    compile = {
-        ["test.typ"]       = {"test.lua"},
-        ["test_blank.typ"] = {},
-        ["test_extended.typ"] = {"test_typ_extended.lua"},
-    },
-}
 
 local output_dir = "output"
 local data_dir   = "data"
 
----------------------------------------------------------
--- Utility
----------------------------------------------------------
-
-local function keys(t)
-    local r = {}
-    for k in pairs(t) do r[#r+1] = k end
-    return r
+local function join(...)
+    local t = {...}
+    return table.concat(t, "/")
 end
 
 local function write_pdf(bytes, outpath)
@@ -42,72 +16,38 @@ local function write_pdf(bytes, outpath)
     fh:close()
 end
 
----------------------------------------------------------
--- PDF generation test (with millisecond timing)
----------------------------------------------------------
+local function load_data(data_file)
+    if not data_file then return nil end
+    local path = join(data_dir, data_file)
+    return assert(loadfile(path, "t", { typst = typst })())
+end
 
-local function genpdf(template, data_file)
-    io.write("Template " .. blue(template))
-
+local function test_compile(template, data_file, should_error)
+    local name = template
     if data_file then
-        io.write(" with " .. yellow(data_file))
+        name = name .. " with " .. data_file
     end
-    io.write(": ")
-
-    -- Load data
-    local data = nil
-    if data_file then
-        local path = join{data_dir, data_file}
-        data = assert(loadfile(path, "t", { typst = typst })(),
-            "Test data not found at " .. path)
-    end
-
-    -----------------------------------------------------
-    -- HIGH-RES wall clock
-    -----------------------------------------------------
-    local t0 = socket.gettime()    -- seconds with microsecond precision
-
-    print("Passing control to typst-compiler")
-    local pdf_bytes, err = typst.compile(join{"templates", template}, data)
-
-    assert(not err, "Typst error: " .. tostring(err))
-    assert(pdf_bytes and pdf_bytes:sub(1,5) == "%PDF-", "Invalid PDF output")
-
-    write_pdf(pdf_bytes, join{output_dir, template .. ".pdf"})
-
+    
+    local data = load_data(data_file)
+    local t0 = socket.gettime()
+    local pdf_bytes, err = typst.compile(join("templates", template), data)
     local ms = (socket.gettime() - t0) * 1000
-
-    print(green("OK") .. ("  [time: %.2f ms]"):format(ms))
-end
-
----------------------------------------------------------
--- Test dispatcher
----------------------------------------------------------
-
-local function run_test(template, files)
-    if #files > 0 then
-        for _, f in ipairs(files) do genpdf(template, f) end
+    
+    if should_error then
+        assert(err, "Expected compilation error but got none")
+        assert(not pdf_bytes, "Expected no PDF output")
+        print(string.format("OK: %s errored as expected (%.2f ms)", name, ms))
+        print("Error:" .. err)
     else
-        genpdf(template)
+        assert(not err, "Compilation error: " .. tostring(err))
+        assert(pdf_bytes:sub(1,5) == "%PDF-", "Invalid PDF output")
+        write_pdf(pdf_bytes, join(output_dir, template .. ".pdf"))
+        print(string.format("OK: %s (%.2f ms)", name, ms))
     end
 end
 
----------------------------------------------------------
--- Main loop
----------------------------------------------------------
-
-local function main()
-    for method, group in pairs(tests) do
-        local ts = keys(group)
-        table.sort(ts)
-        for _, template in ipairs(ts) do
-            run_test(template, group[template])
-        end
-    end
-
-    print()
-    print(green("All tests were successful"))
-end
-
-main()
-
+-- Tests
+test_compile("test_error.typ", "test_typ_extended.lua", true)
+test_compile("test_blank.typ")
+test_compile("test.typ", "test_typ_extended.lua")
+test_compile("test_extended.typ", "test_typ_extended.lua")
