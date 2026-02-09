@@ -23,7 +23,7 @@ local pdf_bytes, err = typst.compile( "helloworld.typ", { who = "World!"} )
 
 Example with the lua code above in the following "helloworld.typ" file:
 ```typst
-Hello #_LUADATA.who
+Hello #sys.inputs.who
 
 ```
 

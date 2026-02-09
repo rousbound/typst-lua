@@ -1,5 +1,5 @@
 use mlua::prelude::*;
-use typst::foundations::{Array, Dict, Str, Value};
+use typst::foundations::{Array, Dict, Str, Value as TypstValue};
 use typst_as_library;
 
 // -------------------------------------
@@ -7,24 +7,24 @@ use typst_as_library;
 // -------------------------------------
 
 trait FromLuaTypst {
-    fn to_typst(self, lua: &Lua) -> LuaResult<Value>;
+    fn to_typst(self, lua: &Lua) -> LuaResult<TypstValue>;
 }
 
 // Implement for LuaValue
 impl FromLuaTypst for LuaValue {
-    fn to_typst(self, lua: &Lua) -> LuaResult<Value> {
+    fn to_typst(self, lua: &Lua) -> LuaResult<TypstValue> {
         match self {
-            LuaValue::Nil => Ok(Value::None),
+            LuaValue::Nil => Ok(TypstValue::None),
 
-            LuaValue::Boolean(b) => Ok(Value::Bool(b)),
-            LuaValue::Number(n) => Ok(Value::Float(n)),
-            LuaValue::Integer(n) => Ok(Value::Int(n)),
+            LuaValue::Boolean(b) => Ok(TypstValue::Bool(b)),
+            LuaValue::Number(n) => Ok(TypstValue::Float(n)),
+            LuaValue::Integer(n) => Ok(TypstValue::Int(n)),
 
             LuaValue::String(s) => match s.to_str() {
-                Ok(text) => Ok(Value::Str(Str::from(text.to_string()))),
+                Ok(text) => Ok(TypstValue::Str(Str::from(text.to_string()))),
                 Err(_) => {
                     let bytes_vec: Vec<u8> = s.as_bytes().to_vec();
-                    Ok(Value::Bytes(typst::foundations::Bytes::new(bytes_vec)))
+                    Ok(TypstValue::Bytes(typst::foundations::Bytes::new(bytes_vec)))
                 }
             },
 
@@ -48,7 +48,7 @@ impl FromLuaTypst for LuaValue {
 // -------------------------------------
 
 impl FromLuaTypst for LuaTable {
-    fn to_typst(self, lua: &Lua) -> LuaResult<Value> {
+    fn to_typst(self, lua: &Lua) -> LuaResult<TypstValue> {
         let mut arr = Array::new();
         let mut map = Dict::new();
 
@@ -114,9 +114,9 @@ impl FromLuaTypst for LuaTable {
         }
 
         if is_array {
-            Ok(Value::Array(arr))
+            Ok(TypstValue::Array(arr))
         } else {
-            Ok(Value::Dict(map))
+            Ok(TypstValue::Dict(map))
         }
     }
 }
@@ -131,16 +131,6 @@ fn compile(
 ) -> LuaResult<(Option<LuaString>, Option<LuaString>)> {
     let input_text = input.to_str()?.to_string();
 
-    // Convert Lua → Typst value
-    // let typst_value = match data.to_typst(lua) {
-    //     Ok(val) => val,
-    //     Err(e) => {
-    //         let err_msg = lua.create_string(&format!(
-    //             "typst-lua: error converting lua value to typst value : {e}"
-    //         ))?;
-    //         return Ok((None, Some(err_msg)));
-    //     }
-    // };
     let typst_value_opt = match data {
         LuaValue::Table(_) => {
             // Only now do we attempt conversion

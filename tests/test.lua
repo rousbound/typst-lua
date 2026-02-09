@@ -19,7 +19,7 @@ end
 local function load_data(data_file)
     if not data_file then return nil end
     local path = join(data_dir, data_file)
-    return assert(loadfile(path, "t", { typst = typst })())
+    return assert(loadfile(path, "t", _ENV)())
 end
 
 local function test_compile(template, data_file, should_error)
@@ -50,4 +50,5 @@ end
 test_compile("test_error.typ", "test_typ_extended.lua", true)
 test_compile("test_blank.typ")
 test_compile("test.typ", "test_typ_extended.lua")
+test_compile("test_decode.typ", "decoded_image.lua")
 test_compile("test_extended.typ", "test_typ_extended.lua")
