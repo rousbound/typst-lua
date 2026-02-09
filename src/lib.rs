@@ -17,27 +17,24 @@ impl FromLuaTypst for LuaValue {
             LuaValue::Nil => Ok(Value::None),
 
             LuaValue::Boolean(b) => Ok(Value::Bool(b)),
-            LuaValue::Number(n)  => Ok(Value::Float(n)),
-            LuaValue::Integer(n)  => Ok(Value::Int(n)),
+            LuaValue::Number(n) => Ok(Value::Float(n)),
+            LuaValue::Integer(n) => Ok(Value::Int(n)),
 
-            LuaValue::String(s) => {
-                match s.to_str() {
-                    Ok(text) => Ok(Value::Str(Str::from(text.to_string()))),
-                    Err(_) => {
-                        let bytes_vec: Vec<u8> = s.as_bytes().to_vec();
-                        Ok(Value::Bytes(typst::foundations::Bytes::new(bytes_vec)))
-                    }
+            LuaValue::String(s) => match s.to_str() {
+                Ok(text) => Ok(Value::Str(Str::from(text.to_string()))),
+                Err(_) => {
+                    let bytes_vec: Vec<u8> = s.as_bytes().to_vec();
+                    Ok(Value::Bytes(typst::foundations::Bytes::new(bytes_vec)))
                 }
-            }
+            },
 
             LuaValue::Table(t) => t.to_typst(lua),
 
             LuaValue::UserData(ud) => {
-                 return Err(LuaError::RuntimeError(
-                    "Lua userdata cannot be converted to Typst value".into()
+                return Err(LuaError::RuntimeError(
+                    "Lua userdata cannot be converted to Typst value".into(),
                 ));
-            },
-
+            }
 
             other => Err(LuaError::RuntimeError(format!(
                 "Unsupported Lua value: {other:?}"
@@ -77,7 +74,7 @@ impl FromLuaTypst for LuaTable {
                     map.insert(Str::from(idx.to_string()), v);
                 }
 
-    // numeric key (float but integer-valued)
+                // numeric key (float but integer-valued)
                 LuaValue::Number(n) if n.fract() == 0.0 => {
                     let idx = n as i64;
 
@@ -97,7 +94,7 @@ impl FromLuaTypst for LuaTable {
                 LuaValue::String(s) => {
                     is_array = false;
                     // let k: String = s.to_str()?.into();
-                    let k = s.to_str()?.to_owned();     // String
+                    let k = s.to_str()?.to_owned(); // String
 
                     map.insert(Str::from(k), v);
                 }
@@ -128,32 +125,51 @@ impl FromLuaTypst for LuaTable {
 // Compile function exposed to Lua
 // -------------------------------------
 
-fn compile(lua: &Lua, (input, data): (LuaString, LuaValue)) -> LuaResult<(Option<LuaString>, Option<LuaString>)> {
+fn compile(
+    lua: &Lua,
+    (input, data): (LuaString, LuaValue),
+) -> LuaResult<(Option<LuaString>, Option<LuaString>)> {
     let input_text = input.to_str()?.to_string();
-    
+
     // Convert Lua → Typst value
-    let typst_value = match data.to_typst(lua) {
-        Ok(val) => val,
-        Err(e) => {
-            let err_msg = lua.create_string(&format!("typst-lua: error converting lua value to typst value : {e}"))?;
-            return Ok((None, Some(err_msg)));
+    // let typst_value = match data.to_typst(lua) {
+    //     Ok(val) => val,
+    //     Err(e) => {
+    //         let err_msg = lua.create_string(&format!(
+    //             "typst-lua: error converting lua value to typst value : {e}"
+    //         ))?;
+    //         return Ok((None, Some(err_msg)));
+    //     }
+    // };
+    let typst_value_opt = match data {
+        LuaValue::Table(_) => {
+            // Only now do we attempt conversion
+            match data.to_typst(lua) {
+                Ok(val) => Some(val),
+                Err(e) => {
+                    let err_msg = lua.create_string(&format!(
+                        "typst-lua: error converting lua table to typst value: {e}"
+                    ))?;
+                    return Ok((None, Some(err_msg)));
+                }
+            }
         }
+        _ => None,
     };
-    
+
     // Call typst compiler
-    let pdf_bytes = match typst_as_library::compile(&input_text, &Some(typst_value)) {
+    let pdf_bytes = match typst_as_library::compile(&input_text, &typst_value_opt) {
         Ok(bytes) => bytes,
         Err(e) => {
             let err_msg = lua.create_string(&format!("typst: {e}"))?;
             return Ok((None, Some(err_msg)));
         }
     };
-    
+
     // Convert result to lua string
     let pdf = lua.create_string(&pdf_bytes)?;
     Ok((Some(pdf), None))
 }
-
 
 // -------------------------------------
 // Module Export
@@ -165,4 +181,3 @@ fn typst(lua: &Lua) -> LuaResult<LuaTable> {
     exports.set("compile", lua.create_function(compile)?)?;
     Ok(exports)
 }
-

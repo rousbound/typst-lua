@@ -16,7 +16,7 @@ use typst::diag::{
     eco_format, FileError, FileResult, PackageError, PackageResult, Severity, SourceDiagnostic,
     Warned,
 };
-use typst::foundations::{Bytes, Datetime, Value};
+use typst::foundations::{Bytes, Datetime, Dict, Value};
 use typst::syntax::package::PackageSpec;
 use typst::syntax::{FileId, Lines, Source, Span};
 use typst::text::{Font, FontBook};
@@ -64,11 +64,16 @@ impl TypstWrapperWorld {
     pub fn new(root: String, source: String, data: Option<Value>) -> Self {
         let root = PathBuf::from(root);
         let fonts = FontSearcher::new().include_system_fonts(true).search();
-        let mut lib = Library::default();
-        if let Some(d) = data {
-            lib.global.scope_mut().define("_LUADATA", d);
-        }
-        // lib.global.scope_mut().define("abcd", Value::Int(1.into()));
+        let lib = {
+            let builder = Library::builder();
+            let builder = if let Some(d) = data {
+                let dict: Dict = d.clone().cast::<Dict>().unwrap();
+                builder.with_inputs(dict)
+            } else {
+                builder
+            };
+            builder.build()
+        };
 
         Self {
             library: LazyHash::new(lib),
