@@ -4,14 +4,14 @@
 // Licensed under the Apache License, Version 2.0
 use std::collections::HashMap;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use typst::diag::Tracepoint;
 
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use codespan_reporting::files::{Error as CodespanError, Files};
-use codespan_reporting::term::{self};
 use codespan_reporting::term::termcolor::Buffer;
+use codespan_reporting::term::{self};
 use typst::diag::{
     eco_format, FileError, FileResult, PackageError, PackageResult, Severity, SourceDiagnostic,
     Warned,
@@ -21,10 +21,10 @@ use typst::syntax::package::PackageSpec;
 use typst::syntax::{FileId, Lines, Source, Span};
 use typst::text::{Font, FontBook};
 use typst::utils::LazyHash;
-use typst::World;
-use typst::WorldExt;
 use typst::Library;
 use typst::LibraryExt;
+use typst::World;
+use typst::WorldExt;
 use typst_kit::fonts::{FontSearcher, FontSlot};
 use typst_pdf::PdfOptions;
 
@@ -67,7 +67,6 @@ impl TypstWrapperWorld {
         let mut lib = Library::default();
         if let Some(d) = data {
             lib.global.scope_mut().define("_LUADATA", d);
-            
         }
         // lib.global.scope_mut().define("abcd", Value::Int(1.into()));
 
@@ -260,9 +259,12 @@ fn retry<T, E>(mut f: impl FnMut() -> Result<T, E>) -> Result<T, E> {
 }
 
 pub fn compile(input: &str, data: &Option<Value>) -> Result<Vec<u8>, String> {
+    let input_path = Path::new(input);
+    let root = input_path.parent().unwrap_or(Path::new("."));
     let content = fs::read_to_string(input)
         .map_err(|err| format!("failed to read source file `{input}`: {err}"))?;
-    let world = TypstWrapperWorld::new(input.to_string(), content, data.clone());
+    let spath = root.to_string_lossy().into_owned();
+    let world = TypstWrapperWorld::new(spath, content, data.clone());
     let Warned { output, warnings } = typst::compile(&world);
 
     match output {
@@ -286,7 +288,10 @@ fn format_diagnostics(
     errors: &[SourceDiagnostic],
     warnings: &[SourceDiagnostic],
 ) -> Result<String, String> {
-    let config = term::Config { tab_width: 2, ..Default::default() };
+    let config = term::Config {
+        tab_width: 2,
+        ..Default::default()
+    };
     let mut buffer = Buffer::no_color();
 
     for diagnostic in warnings.iter().chain(errors) {
@@ -304,35 +309,25 @@ fn format_diagnostics(
         )
         .with_labels(label(world, diagnostic.span).into_iter().collect());
 
-        term::emit(&mut buffer, &config, world, &diag)
-            .map_err(|err| err.to_string())?;
+        term::emit(&mut buffer, &config, world, &diag).map_err(|err| err.to_string())?;
 
         for point in &diagnostic.trace {
             let message = match &point.v {
-    Tracepoint::Call(Some(name)) =>
-        format!("in call to {}", name.as_str()),
+                Tracepoint::Call(Some(name)) => format!("in call to {}", name.as_str()),
 
-    Tracepoint::Call(None) =>
-        "in call".to_string(),
+                Tracepoint::Call(None) => "in call".to_string(),
 
-    Tracepoint::Show(name) =>
-        format!("while showing {}", name.as_str()),
+                Tracepoint::Show(name) => format!("while showing {}", name.as_str()),
 
-    Tracepoint::Import =>
-        "during import".to_string(),
-};
-
+                Tracepoint::Import => "during import".to_string(),
+            };
 
             let help = Diagnostic::help()
                 .with_message(message)
                 .with_labels(label(world, diagnostic.span).into_iter().collect());
 
-            term::emit(&mut buffer, &config, world, &help)
-                .map_err(|err| err.to_string())?;
+            term::emit(&mut buffer, &config, world, &help).map_err(|err| err.to_string())?;
         }
-
-
-
     }
 
     String::from_utf8(buffer.into_inner()).map_err(|err| err.to_string())
@@ -364,17 +359,15 @@ impl<'a> Files<'a> for TypstWrapperWorld {
 
     fn line_index(&'a self, id: FileId, given: usize) -> CodespanResult<usize> {
         let source = self.lookup(id);
-        source.byte_to_line(given).ok_or_else(|| CodespanError::IndexTooLarge {
-            given,
-            max: source.len_bytes(),
-        })
+        source
+            .byte_to_line(given)
+            .ok_or_else(|| CodespanError::IndexTooLarge {
+                given,
+                max: source.len_bytes(),
+            })
     }
 
-    fn line_range(
-        &'a self,
-        id: FileId,
-        given: usize,
-    ) -> CodespanResult<std::ops::Range<usize>> {
+    fn line_range(&'a self, id: FileId, given: usize) -> CodespanResult<std::ops::Range<usize>> {
         let source = self.lookup(id);
         source
             .line_to_range(given)
@@ -384,12 +377,7 @@ impl<'a> Files<'a> for TypstWrapperWorld {
             })
     }
 
-    fn column_number(
-        &'a self,
-        id: FileId,
-        _: usize,
-        given: usize,
-    ) -> CodespanResult<usize> {
+    fn column_number(&'a self, id: FileId, _: usize, given: usize) -> CodespanResult<usize> {
         let source = self.lookup(id);
         source.byte_to_column(given).ok_or_else(|| {
             let max = source.len_bytes();
