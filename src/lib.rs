@@ -49,73 +49,66 @@ impl FromLuaTypst for LuaValue {
 
 impl FromLuaTypst for LuaTable {
     fn to_typst(self, lua: &Lua) -> LuaResult<TypstValue> {
-        let mut arr = Array::new();
-        let mut map = Dict::new();
-
+        // First pass: check if this is an array
         let mut is_array = true;
         let mut expected = 1;
+        let mut count = 0;
 
         for pair in self.pairs::<LuaValue, LuaValue>() {
-            let (key, value) = pair?;
-            let v = value.to_typst(lua)?; // recursive
+            let (key, _) = pair?;
+            count += 1;
 
             match key {
-                // numeric key
                 LuaValue::Integer(idx) => {
                     if idx != expected {
                         is_array = false;
+                        break;
                     }
                     expected += 1;
-
-                    if is_array {
-                        arr.push(v.clone());
-                    }
-
-                    map.insert(Str::from(idx.to_string()), v);
                 }
-
-                // numeric key (float but integer-valued)
                 LuaValue::Number(n) if n.fract() == 0.0 => {
                     let idx = n as i64;
-
                     if idx != expected {
                         is_array = false;
+                        break;
                     }
                     expected += 1;
-
-                    if is_array {
-                        arr.push(v.clone());
-                    }
-
-                    map.insert(Str::from(idx.to_string()), v);
                 }
-
-                // string key
-                LuaValue::String(s) => {
+                _ => {
                     is_array = false;
-                    // let k: String = s.to_str()?.into();
-                    let k = s.to_str()?.to_owned(); // String
-
-                    map.insert(Str::from(k), v);
-                }
-
-                // boolean key
-                LuaValue::Boolean(b) => {
-                    is_array = false;
-                    map.insert(Str::from(b.to_string()), v);
-                }
-
-                other => {
-                    return Err(LuaError::RuntimeError(format!(
-                        "Unsupported Lua table key: {other:?}"
-                    )))
+                    break;
                 }
             }
         }
 
+        // Second pass: populate the appropriate data structure
         if is_array {
+            let mut arr = Array::new();
+            for pair in self.pairs::<LuaValue, LuaValue>() {
+                let (_, value) = pair?;
+                arr.push(value.to_typst(lua)?);
+            }
             Ok(TypstValue::Array(arr))
         } else {
+            let mut map = Dict::new();
+            for pair in self.pairs::<LuaValue, LuaValue>() {
+                let (key, value) = pair?;
+                let v = value.to_typst(lua)?;
+
+                let key_str = match key {
+                    LuaValue::Integer(idx) => Str::from(idx.to_string()),
+                    LuaValue::Number(n) if n.fract() == 0.0 => Str::from((n as i64).to_string()),
+                    LuaValue::String(s) => Str::from(s.to_str()?.to_owned()),
+                    LuaValue::Boolean(b) => Str::from(b.to_string()),
+                    other => {
+                        return Err(LuaError::RuntimeError(format!(
+                            "Unsupported Lua table key: {other:?}"
+                        )))
+                    }
+                };
+
+                map.insert(key_str, v);
+            }
             Ok(TypstValue::Dict(map))
         }
     }

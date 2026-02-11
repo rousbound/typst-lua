@@ -61,7 +61,7 @@ pub struct TypstWrapperWorld {
 }
 
 impl TypstWrapperWorld {
-    pub fn new(root: String, source: String, data: Option<Value>) -> Self {
+    pub fn new(root: String, source: String, source_filename: String, data: Option<Value>) -> Self {
         let root = PathBuf::from(root);
         let fonts = FontSearcher::new().include_system_fonts(true).search();
         let lib = {
@@ -74,13 +74,15 @@ impl TypstWrapperWorld {
             };
             builder.build()
         };
+        let source_file_id = FileId::new(None, typst::syntax::VirtualPath::new(source_filename));
+        let source = Source::new(source_file_id, source.into());
 
         Self {
             library: LazyHash::new(lib),
             book: LazyHash::new(fonts.book),
             root,
             fonts: fonts.fonts,
-            source: Source::detached(source),
+            source: source,
             time: time::OffsetDateTime::now_utc(),
             cache_directory: std::env::var_os("CACHE_DIRECTORY")
                 .map(|os_path| os_path.into())
@@ -269,7 +271,12 @@ pub fn compile(input: &str, data: &Option<Value>) -> Result<Vec<u8>, String> {
     let content = fs::read_to_string(input)
         .map_err(|err| format!("failed to read source file `{input}`: {err}"))?;
     let spath = root.to_string_lossy().into_owned();
-    let world = TypstWrapperWorld::new(spath, content, data.clone());
+    let source_filename = input_path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or_else(|| format!("invalid input path: {input}"))?;
+
+    let world = TypstWrapperWorld::new(spath, content, source_filename.to_string(), data.clone());
     let Warned { output, warnings } = typst::compile(&world);
 
     match output {
