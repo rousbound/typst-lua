@@ -33,13 +33,42 @@ Output in pdf will be:
 Hello World!
 ```
 
-## Caveats and Gotcha's
+# Caveats and Gotchas
 
-Typst has different types for Array and Dict, differently from Lua tables. This kind of type coersion can be done in different ways, this project adopts the following stance:
+## sys.inputs
 
-- A Lua table will be coerced into an array in Typst *if and only if* it is a dense array
-Ex: {[1] = 1, [2] = 2, [4] = 4} is sparse and will be coerced into a TypstDict like:
-    --> ("1" : 1, "2" : 2, "4" : 4)
+The LuaTable passed as input will be forcifully coerced into a TypstDict. This is done to follow Typst CLI API semantics, which is:
+
+- Accept key-value pairs through `--input k=v` and save into sys.inputs. Any other more complex structure should be passed as string and serialized with json decode. Therefore, from within Typst document, sys.inputs is a Dict.
+
+Any other LuaTable inside the sys.inputs will be converted following the next rule.
+
+## Lua Tables → Typst Types
+
+Typst distinguishes between **Arrays** and **Dictionaries**, unlike Lua's unified table type. The conversion follows these rules:
+
+A LuaTable becomes a TypstArray **only** if it's a **dense, 1-indexed sequence**:
+
+```lua
+local data = {1, 2, 3, 4}
+-- Typst: (1, 2, 3, 4)
+
+local data = {[1] = "a", [2] = "b", [3] = "c"}
+-- Typst: ("a", "b", "c")
+```
+
+Otherwise, it will be turned into a TypstDict:
+
+```lua
+local data = {[1] = 1, [2] = 2, [4] = 4}
+-- Typst: ("1": 1, "2": 2, "4": 4)
+
+local data = {name = "Alice", age = 30}
+-- Typst: (name: "Alice", age: 30)
+
+local data = {[1] = "first", name = "Alice"}
+-- Typst: ("1": "first", name: "Alice")
+```
 
 ## License
 
