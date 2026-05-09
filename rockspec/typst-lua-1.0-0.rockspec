@@ -3,7 +3,7 @@ version = "1.0-0"
 
 source = {
    url = "git+https://github.com/rousbound/typst-lua.git",
-   branch = "master"
+   branch = "main"
 }
 
 description = {
