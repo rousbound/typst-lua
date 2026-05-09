@@ -1,9 +1,9 @@
 package = "typst-lua"
-version = "dev-1"
+version = "1.0-0"
 
 source = {
    url = "git+https://github.com/rousbound/typst-lua.git",
-   branch = "dev-1.x"
+   branch = "master"
 }
 
 description = {
@@ -12,7 +12,7 @@ description = {
       Lua bindings for the Typst compiler
    ]],
    homepage = "https://github.com/rousbound/typst-lua",
-   license = "MIT"
+   license = "APACHE2.0"
 }
 
 dependencies = {
