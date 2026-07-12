@@ -3,15 +3,14 @@
 // Original work Copyright 2026 tfachmann (Timo Bachmann)
 // Licensed under the Apache License, Version 2.0
 use std::collections::HashMap;
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use typst::diag::Tracepoint;
 
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use codespan_reporting::files::{Error as CodespanError, Files};
+use codespan_reporting::term;
 use codespan_reporting::term::termcolor::Buffer;
-use codespan_reporting::term::{self};
 use typst::diag::{
     eco_format, FileError, FileResult, PackageError, PackageResult, Severity, SourceDiagnostic,
     Warned,
@@ -27,6 +26,13 @@ use typst::World;
 use typst::WorldExt;
 use typst_kit::fonts::{FontSearcher, FontSlot};
 use typst_pdf::PdfOptions;
+
+pub enum OutputFormat {
+    Pdf,
+    Html,
+    Svg,
+    Png { ppi: f32 },
+}
 
 type CodespanResult<T> = Result<T, CodespanError>;
 
@@ -65,7 +71,8 @@ impl TypstWrapperWorld {
         let root = PathBuf::from(root);
         let fonts = FontSearcher::new().include_system_fonts(true).search();
         let lib = {
-            let builder = Library::builder();
+            let builder = Library::builder()
+                .with_features(typst::Features::from_iter([typst::Feature::Html]));
             let builder = if let Some(d) = data {
                 let dict: Dict = d.clone().cast::<Dict>().unwrap();
                 builder.with_inputs(dict)
@@ -265,24 +272,72 @@ fn retry<T, E>(mut f: impl FnMut() -> Result<T, E>) -> Result<T, E> {
     }
 }
 
-pub fn compile(input: &str, data: &Option<Value>) -> Result<Vec<u8>, String> {
-    let input_path = Path::new(input);
-    let root = input_path.parent().unwrap_or(Path::new("."));
-    let content = fs::read_to_string(input)
-        .map_err(|err| format!("failed to read source file `{input}`: {err}"))?;
-    let spath = root.to_string_lossy().into_owned();
+pub fn compile(
+    file: &str,
+    root: &str,
+    source: &str,
+    data: &Option<Value>,
+    output_format: OutputFormat,
+) -> Result<Vec<u8>, String> {
+    let input_path = Path::new(file);
     let source_filename = input_path
         .file_name()
         .and_then(|n| n.to_str())
-        .ok_or_else(|| format!("invalid input path: {input}"))?;
+        .ok_or_else(|| format!("invalid input path: {file}"))?;
 
-    let world = TypstWrapperWorld::new(spath, content, source_filename.to_string(), data.clone());
-    let Warned { output, warnings } = typst::compile(&world);
-
-    match output {
-        Ok(document) => typst_pdf::pdf(&document, &PdfOptions::default())
-            .map_err(|errors| render_diagnostics(&world, &errors, &warnings)),
-        Err(errors) => Err(render_diagnostics(&world, &errors, &warnings)),
+    let world = TypstWrapperWorld::new(
+        root.to_string(),
+        source.to_string(),
+        source_filename.to_string(),
+        data.clone(),
+    );
+    match output_format {
+        OutputFormat::Pdf => {
+            let Warned { output, warnings } =
+                typst::compile::<typst::layout::PagedDocument>(&world);
+            match output {
+                Ok(document) => typst_pdf::pdf(&document, &PdfOptions::default())
+                    .map_err(|errors| render_diagnostics(&world, &errors, &warnings)),
+                Err(errors) => Err(render_diagnostics(&world, &errors, &warnings)),
+            }
+        }
+        OutputFormat::Html => {
+            let Warned { output, warnings } = typst::compile::<typst_html::HtmlDocument>(&world);
+            match output {
+                Ok(document) => typst_html::html(&document)
+                    .map(|s| s.into_bytes())
+                    .map_err(|errors| render_diagnostics(&world, &errors, &warnings)),
+                Err(errors) => Err(render_diagnostics(&world, &errors, &warnings)),
+            }
+        }
+        OutputFormat::Svg => {
+            let Warned { output, warnings } =
+                typst::compile::<typst::layout::PagedDocument>(&world);
+            match output {
+                Ok(document) => {
+                    if document.pages.is_empty() {
+                        return Err("document has no pages".to_string());
+                    }
+                    Ok(typst_svg::svg(&document.pages[0]).into_bytes())
+                }
+                Err(errors) => Err(render_diagnostics(&world, &errors, &warnings)),
+            }
+        }
+        OutputFormat::Png { ppi } => {
+            let Warned { output, warnings } =
+                typst::compile::<typst::layout::PagedDocument>(&world);
+            match output {
+                Ok(document) => {
+                    if document.pages.is_empty() {
+                        return Err("document has no pages".to_string());
+                    }
+                    let pixel_per_pt = ppi / 72.0;
+                    let pixmap = typst_render::render(&document.pages[0], pixel_per_pt);
+                    pixmap.encode_png().map_err(|e| e.to_string())
+                }
+                Err(errors) => Err(render_diagnostics(&world, &errors, &warnings)),
+            }
+        }
     }
 }
 

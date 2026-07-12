@@ -1,6 +1,8 @@
 use mlua::prelude::*;
+use std::fs;
+use std::path::Path;
 use typst::foundations::{Array, Dict, Str, Value as TypstValue};
-use typst_as_library;
+use typst_as_library::OutputFormat;
 
 // -------------------------------------
 // TRAIT: FromLuaTypst
@@ -118,30 +120,98 @@ impl FromLuaTypst for LuaTable {
 // Compile function exposed to Lua
 // -------------------------------------
 
-fn compile(
-    lua: &Lua,
-    (input, data): (LuaString, LuaValue),
-) -> LuaResult<(Option<LuaString>, Option<LuaString>)> {
-    let input_text = input.to_str()?.to_string();
-
-    let typst_value_opt = match data {
-        LuaValue::Table(_) => {
-            // Only now do we attempt conversion
-            match data.to_typst(lua) {
-                Ok(val) => Some(val),
-                Err(e) => {
-                    let err_msg = lua.create_string(&format!(
-                        "typst-lua: error converting lua table to typst value: {e}"
-                    ))?;
-                    return Ok((None, Some(err_msg)));
-                }
-            }
+fn compile(lua: &Lua, args: LuaTable) -> LuaResult<(Option<LuaString>, Option<LuaString>)> {
+    let file: String = match args.get::<LuaValue>("file")? {
+        LuaValue::Nil => "<stdin>".to_string(),
+        LuaValue::String(s) => s.to_str()?.to_string(),
+        other => {
+            let err = lua.create_string(&format!(
+                "typst-lua: 'file' must be a string, got {other:?}"
+            ))?;
+            return Ok((None, Some(err)));
         }
-        _ => None,
+    };
+    let root: String = match args.get::<LuaValue>("file")? {
+        LuaValue::Nil => Path::new(&file)
+            .parent()
+            .unwrap_or(Path::new("."))
+            .to_string_lossy()
+            .into_owned(),
+        LuaValue::String(s) => s.to_str()?.to_string(),
+        other => {
+            let err = lua.create_string(&format!(
+                "typst-lua: 'root' must be a string, got {other:?}"
+            ))?;
+            return Ok((None, Some(err)));
+        }
+    };
+    let source: String = match args.get::<LuaValue>("source")? {
+        LuaValue::Nil => fs::read_to_string(&file).map_err(|err| {
+            mlua::Error::external(format!("failed to read source file `{file}`: {err}"))
+        })?,
+        LuaValue::String(s) => s.to_str()?.to_string(),
+        other => {
+            let err = lua.create_string(&format!(
+                "typst-lua: 'source' must be a string, got {other:?}"
+            ))?;
+            return Ok((None, Some(err)));
+        }
+    };
+    let format_str: String = match args.get::<LuaValue>("format")? {
+        LuaValue::Nil => "pdf".to_string(),
+        LuaValue::String(s) => s.to_str()?.to_lowercase(),
+        other => {
+            let err = lua.create_string(&format!(
+                "typst-lua: 'format' must be a string or nil, got {other:?}"
+            ))?;
+            return Ok((None, Some(err)));
+        }
+    };
+    let ppi: f32 = match args.get::<LuaValue>("ppi")? {
+        LuaValue::Nil => 144.0,
+        LuaValue::Number(n) => n as f32,
+        LuaValue::Integer(n) => n as f32,
+        other => {
+            let err = lua.create_string(&format!(
+                "typst-lua: 'ppi' must be a number or nil, got {other:?}"
+            ))?;
+            return Ok((None, Some(err)));
+        }
+    };
+    let data = match args.get::<LuaValue>("input")? {
+        LuaValue::Nil => None,
+        LuaValue::Table(input) => match input.to_typst(lua) {
+            Ok(val) => Some(val),
+            Err(e) => {
+                let err_msg = lua.create_string(&format!(
+                    "typst-lua: error converting 'input' to typst value: {e}"
+                ))?;
+                return Ok((None, Some(err_msg)));
+            }
+        },
+        other => {
+            let err = lua.create_string(&format!(
+                "typst-lua: 'input' must be a table or nil, got {other:?}"
+            ))?;
+            return Ok((None, Some(err)));
+        }
+    };
+
+    let output_format = match format_str.as_str() {
+        "pdf" => OutputFormat::Pdf,
+        "html" => OutputFormat::Html,
+        "svg" => OutputFormat::Svg,
+        "png" => OutputFormat::Png { ppi },
+        other => {
+            let err = lua.create_string(&format!(
+                "typst-lua: unsupported format '{other}'; expected 'pdf', 'html', 'svg', or 'png'"
+            ))?;
+            return Ok((None, Some(err)));
+        }
     };
 
     // Call typst compiler
-    let pdf_bytes = match typst_as_library::compile(&input_text, &typst_value_opt) {
+    let pdf_bytes = match typst_as_library::compile(&file, &root, &source, &data, output_format) {
         Ok(bytes) => bytes,
         Err(e) => {
             let err_msg = lua.create_string(&format!("typst: {e}"))?;

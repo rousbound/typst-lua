@@ -22,7 +22,10 @@ ureq = "2.9"
 time = "0.3"
 ttf-parser = "0.25"
 typst-kit = { version = "0.14", features = ["embed-fonts"] }
+typst-html = "0.14"
 typst-pdf = "0.14"
+typst-svg = "0.14"
+typst-render = "0.14"
 codespan-reporting = "0.11"
 
 [lib]
